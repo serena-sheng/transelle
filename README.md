@@ -150,7 +150,7 @@ bash tools/store-key-in-vault.sh
 
 ---
 
-## 日语 / 二次元专用设置（外部注入，多份可共存）
+## 分语种外部设置（日语 / 英语成人向，多份可共存）
 
 **问题**：日语（尤其轻小说 / 游戏 / 动画台词）常被译得「不彻底」——夹带假名、语气词直译、术语各译各的；成人向文本里还有大量专用词。
 
@@ -167,6 +167,16 @@ bash tools/store-key-in-vault.sh
 | `local-ja-adult.json` | 成人内容领域的专门术语 |
 | `local-ja-adult-people.json` | 女优、成人漫画家 |
 | `local-ja-adult-works.json` | 成人向作品名 / 系列名 / 题材标签 |
+
+**英语（成人向）**：同一套机制，但**只在内容看起来是成人向时才启用**——命中站点名 / 关键词才会附加，普通英文页不会白塞几千字术语表（省 token）：
+
+| 文件 | 放什么 |
+| --- | --- |
+| `local-en.json` | 站点 / 片商名保留原文的规则、常见女优名译法 |
+| `local-en-terms.json` | 术语扩充 |
+| `local-en-adult.json` | 标签 / 分类术语（Pornhub、XVideos 那类站点的 tag） |
+
+判定词可以在配置里用 `"markers": "词a,词b"` 补充。日语那份的判定条件是「本批出现假名」。
 
 任何一份都能用 `"imports": ["别的文件.json"]` 再引入任意文件。形状：
 
@@ -189,6 +199,7 @@ manifest.json            MV3 清单
 icons/                   图标（16 / 32 / 48 / 128）
 local-seed.json          本机私密种子（含 Key，gitignore，不进仓库）
 local-ja*.json           本机日语 / 二次元设置，多份共存（gitignore，不进仓库）
+local-en*.json           本机英语（成人向）设置（gitignore，不进仓库）
 src/
   background.js          Service Worker：代理请求、图片取回、base64 编码
   content.js             内容脚本入口：装配设置与规则，响应弹窗指令
@@ -198,7 +209,7 @@ src/
     rules.js             站点规则匹配与合并（无内置预设）
     engines.js           统一 OpenAI 兼容调用（文本 / 视觉 / 连接测试）
     seed.js              本机种子 → 设置的导入（只生效一次）
-    ja.js                日语 / 二次元外部设置（local-ja*.json）的读取与合并
+    locales.js           分语种外部设置（local-ja*.json / local-en*.json）的读取与合并
     romaji.js            假名 → 罗马音（本地换算，兜底难译假名）
   page/
     collector.js         挑出待翻译文本节点

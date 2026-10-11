@@ -10,7 +10,7 @@ importScripts(
   "./core/settings.js",
   "./core/romaji.js",
   "./core/engines.js",
-  "./core/ja.js",
+  "./core/locales.js",
   "./core/seed.js"
 );
 

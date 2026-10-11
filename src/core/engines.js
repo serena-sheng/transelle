@@ -360,17 +360,17 @@
     const list = texts.map((t) => String(t));
     if (!list.length) return [];
 
-    // 日语（含二次元文本）补充：由外部文件 local-ja.json 提供更专的提示词与术语表，
-    // 只在本批出现日文假名时启用；用户自己写的站点规则优先于它。
+    // 分语种的外部设置（日语 / 英语成人向…）：命中才附加，站点规则优先于它们。
     let effectiveRule = rule;
-    let jaCfg = null;
-    if (Transelle.ja && list.some((t) => Transelle.hasKana(t))) {
-      jaCfg = await Transelle.ja.get();
-      if (jaCfg) {
+    let jaCfg = null; // 只有「日语」需要不走流式 + 假名罗马音兜底
+    if (Transelle.locales) {
+      const active = await Transelle.locales.activeFor(list);
+      if (active.length) {
         effectiveRule = {
-          terms: [jaCfg.terms, rule.terms].filter(Boolean).join("\n"),
-          prompt: [jaCfg.prompt, rule.prompt].filter(Boolean).join("\n"),
+          terms: [...active.map((l) => l.terms), rule.terms].filter(Boolean).join("\n"),
+          prompt: [...active.map((l) => l.prompt), rule.prompt].filter(Boolean).join("\n"),
         };
+        jaCfg = active.find((l) => l.id === "ja") || null;
       }
     }
     const jaActive = !!jaCfg;
