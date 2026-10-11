@@ -161,9 +161,12 @@ bash tools/store-key-in-vault.sh
 | 文件 | 放什么 |
 | --- | --- |
 | `local-ja.json` | 通用日语 / 二次元：提示词 + 术语表 + 罗马音开关 |
-| `local-ja-terms.json` | 术语表扩充 |
-| `local-ja-names.json` | 人名、角色名、标签名 |
-| `local-ja-adult.json` | 成人内容领域的专门术语（单独放，便于自己管理） |
+| `local-ja-terms.json` | 术语扩充（二次元、片假名、种族、系统名词…） |
+| `local-ja-names.json` | 角色名、标签名 |
+| `local-ja-people.json` | 常见日语人名（含假名读法与常见姓氏） |
+| `local-ja-adult.json` | 成人内容领域的专门术语 |
+| `local-ja-adult-people.json` | 女优、成人漫画家 |
+| `local-ja-adult-works.json` | 成人向作品名 / 系列名 / 题材标签 |
 
 任何一份都能用 `"imports": ["别的文件.json"]` 再引入任意文件。形状：
 

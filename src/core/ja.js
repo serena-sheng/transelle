@@ -23,10 +23,13 @@
   if (Transelle.ja) return;
 
   const FILES = [
-    "local-ja.json",
-    "local-ja-terms.json",
-    "local-ja-names.json",
-    "local-ja-adult.json",
+    "local-ja.json", // 通用：提示词 + 术语表 + 罗马音开关
+    "local-ja-terms.json", // 术语扩充（二次元 / 片假名）
+    "local-ja-names.json", // 角色名 / 标签名
+    "local-ja-people.json", // 常见日语人名（含假名读法）
+    "local-ja-adult.json", // 成人向术语
+    "local-ja-adult-people.json", // 女优 / 成人漫画家
+    "local-ja-adult-works.json", // 成人向作品名
   ];
 
   let cached; // undefined = 未读；object = 读过的合并结果（可能为 null）
