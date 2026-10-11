@@ -38,6 +38,7 @@
       rule,
       toLang: settings.page.toLang,
       routing: settings.page.routing,
+      concurrency: settings.page.concurrency,
     });
     return true;
   };

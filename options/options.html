@@ -85,6 +85,11 @@
         <span>智能分流：正文精翻，边角（导航/页脚/侧栏）走免费机翻</span>
         <input type="checkbox" id="page-routing" />
       </label>
+
+      <label class="field">
+        <span class="label">并发批次数（1–64；DeepSeek flash 账号上限 2500）</span>
+        <input type="number" id="page-concurrency" min="1" max="64" step="1" />
+      </label>
     </section>
 
     <!-- 漫画翻译 -->

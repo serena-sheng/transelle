@@ -86,7 +86,7 @@
       } finally {
         clearTimeout(timer);
       }
-      if (res.ok || !RETRYABLE_STATUS.has(res.status) || attempt >= 1) break;
+      if (res.ok || !RETRYABLE_STATUS.has(res.status) || attempt >= 2) break;
       await Transelle.sleep(600 * (attempt + 1));
     }
 

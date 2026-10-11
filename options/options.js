@@ -182,6 +182,7 @@
     $("#page-highlight").checked = !!p.highlight;
     const routing = (p.routing = p.routing || { enabled: true, fast: "google" });
     $("#page-routing").checked = routing.enabled !== false;
+    $("#page-concurrency").value = p.concurrency || 16;
 
     $("#page-auto").addEventListener("change", (e) => {
       p.autoTranslate = e.target.checked;
@@ -201,6 +202,12 @@
     });
     $("#page-routing").addEventListener("change", (e) => {
       p.routing = { ...routing, enabled: e.target.checked };
+      saveDebounced();
+    });
+    $("#page-concurrency").addEventListener("change", (e) => {
+      const n = Number(e.target.value);
+      p.concurrency = Number.isFinite(n) ? Math.min(64, Math.max(1, Math.round(n))) : 16;
+      e.target.value = p.concurrency;
       saveDebounced();
     });
     $("#page-engine").addEventListener("change", (e) => {

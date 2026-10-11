@@ -59,6 +59,8 @@
       mode: "bilingual", // bilingual=原文+译文对照；only=仅显示译文
       toLang: "zh-CN", // 目标语言
       highlight: false, // 是否给译文加浅色底纹，便于一眼分辨
+      // 并发批次数（DeepSeek flash 账号级上限 2500，这里只是别把浏览器和网络打满）
+      concurrency: 16,
       // 分流：正文（阅读主体）才交给 DeepSeek 精翻，边角（导航/页脚/侧栏等）交给免费机翻
       routing: {
         enabled: true,
@@ -117,6 +119,9 @@
       if (!merged.engines.some((e) => e.id === merged.engineId)) {
         merged.engineId = merged.engines[0].id;
       }
+      // 并发数钳到 1–64
+      const c = Number(merged.page.concurrency);
+      merged.page.concurrency = Number.isFinite(c) ? Math.min(64, Math.max(1, Math.round(c))) : 16;
       if (merged.visionEngineId || merged.visionEngineId === "") {
         // 空字符串是合法值（表示复用网页引擎）
         if (

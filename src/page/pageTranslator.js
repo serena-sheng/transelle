@@ -10,12 +10,14 @@
   const Transelle = (root.Transelle = root.Transelle || {});
   if (Transelle.pageTranslator) return;
 
-  // 小批次 + 高并发：模型是「逐字生成」的，把 20 条塞进一次请求等于让它在一条
-  // 连接上串行吐 20 条；拆成 10 条一批、6 批同时在飞，首屏与整页耗时就都下来了。
+  // 小批次 + 高并发：模型是「逐字生成」的，把一批塞得太大等于让它在一条连接上
+  // 串行吐完；拆成小批、多批同时在飞，首屏与整页耗时就都下来了。
+  // DeepSeek flash 的账号级并发上限是 2500，这里默认 16 只是别把浏览器和网络打满。
   const BATCH_SIZE = 10; // 单次请求交给模型的文本条数
-  const CONCURRENCY = 6; // 同时在飞的批次数上限
+  const DEFAULT_CONCURRENCY = 16; // 并发的批次数（可在设置里改；DeepSeek flash 上限 2500）
+  const MAX_CONCURRENCY = 64;
   const FAST_BATCH_SIZE = 20; // 免费机翻一次带的条数（端点支持多条 q）
-  const FAST_CONCURRENCY = 4; // 机翻并发（别打太猛，免得被限流）
+  const FAST_CONCURRENCY = 8; // 机翻并发（别打太猛，免得被限流）
   const MUTATION_DEBOUNCE = 600; // 动态内容补翻的防抖时间
 
   // 流式增量：background 每译好一条就推回一个 TRANSLATE_DELTA，按 batchId 路由到对应批次
@@ -38,6 +40,7 @@
     let epoch = 0; // 每次 start/stop 自增；在飞的批次据此判断自己是否已过期
     let batchSeq = 0; // 批次编号，用于把流式增量路由回对应批次
     let routing = { enabled: true, fast: "google" }; // 是否按内容权重把边角降级到机翻
+    let concurrency = DEFAULT_CONCURRENCY; // 正文精翻的并发批次数
 
     const report = (payload) => {
       try {
@@ -184,7 +187,7 @@
         }
       };
 
-      const runs = [runPool(deepUnits, BATCH_SIZE, CONCURRENCY, deepHandler)];
+      const runs = [runPool(deepUnits, BATCH_SIZE, concurrency, deepHandler)];
       freeGroups.forEach((units, key) => {
         const [tl, kind] = key.split("|");
         runs.push(
@@ -259,10 +262,14 @@
         progressCb = cb;
       },
 
-      async start({ rule: nextRule, toLang: nextToLang, routing: nextRouting } = {}) {
+      async start({ rule: nextRule, toLang: nextToLang, routing: nextRouting, concurrency: nextConcurrency } = {}) {
         if (nextRule) rule = { ...Transelle.DEFAULT_RULE, ...nextRule };
         if (nextToLang) toLang = nextToLang;
         if (nextRouting) routing = { ...routing, ...nextRouting };
+        const c = Number(nextConcurrency);
+        if (Number.isFinite(c) && c > 0) {
+          concurrency = Math.min(MAX_CONCURRENCY, Math.max(1, Math.round(c)));
+        }
         if (running) return;
 
         running = true;
