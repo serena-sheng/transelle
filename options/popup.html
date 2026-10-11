@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>翻译娘MARI</title>
+  <style>
+    :root {
+      --brand: #e93d82;
+      --brand-soft: #ffa3c9;
+      --text: #2b1b24;
+      --text-dim: #7d6673;
+      --line: rgba(233, 61, 130, 0.18);
+      --card: #fff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --brand: #ff8fbe;
+        --brand-soft: #ffb7d5;
+        --text: #f6eaf0;
+        --text-dim: #b09aa6;
+        --line: rgba(255, 143, 190, 0.2);
+        --card: #241a20;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 264px;
+      margin: 0;
+      padding: 0;
+      background: var(--card);
+      color: var(--text);
+      font: 13px/1.5 system-ui, -apple-system, "PingFang SC", sans-serif;
+    }
+    .top {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 13px 16px 15px;
+      background: linear-gradient(135deg, rgba(233,61,130,.09), rgba(255,163,201,.15));
+      color: var(--text);
+    }
+    .top::after {
+      content: "";
+      position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+      background: linear-gradient(90deg, var(--brand) 0%, var(--brand-soft) 100%);
+    }
+    @media (prefers-color-scheme: dark) {
+      .top { background: linear-gradient(135deg, rgba(255,143,190,.12), rgba(255,183,213,.06)); }
+    }
+    .top .logo {
+      width: 34px; height: 34px; flex: none; display: block;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(233,61,130,.26), 0 1px 2px rgba(0,0,0,.08);
+    }
+    .top h1 { margin: 0; font-size: 14px; font-weight: 600; }
+    .top p { margin: 1px 0 0; font-size: 11px; color: var(--text-dim); }
+    .body { padding: 12px 14px 14px; }
+    .row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 9px 0;
+    }
+    .row + .row { border-top: 1px solid var(--line); }
+    .row .k { color: var(--text-dim); font-size: 12px; }
+    .row .v { font-weight: 600; font-size: 12px; }
+    button {
+      width: 100%; margin-top: 10px; padding: 10px;
+      border: 0; border-radius: 10px;
+      background: var(--brand); color: #fff;
+      font: inherit; font-size: 13px; font-weight: 600;
+      cursor: pointer;
+    }
+    button.ghost {
+      background: transparent; color: var(--brand);
+      border: 1px solid var(--line);
+    }
+    button:hover { opacity: 0.9; }
+    .note { margin-top: 10px; font-size: 11px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <img class="logo" src="../icons/icon-128.png" alt="翻译娘MARI" width="34" height="34" />
+    <div>
+      <h1>翻译娘MARI</h1>
+      <p>Transelle</p>
+    </div>
+  </div>
+  <div class="body">
+    <div class="row">
+      <span class="k">网页翻译</span>
+      <span class="v" id="page-state">—</span>
+    </div>
+    <div class="row">
+      <span class="k">漫画翻译</span>
+      <span class="v" id="manga-state">—</span>
+    </div>
+    <div class="row">
+      <span class="k">命中规则</span>
+      <span class="v" id="rule-state">—</span>
+    </div>
+
+    <button id="toggle-page">翻译本页</button>
+    <button id="open-options" class="ghost">打开设置</button>
+    <p class="note" id="note"></p>
+  </div>
+
+  <script src="../src/core/shared.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

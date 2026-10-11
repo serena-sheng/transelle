@@ -1,0 +1,12 @@
+# 本机私密种子：含 API Key，绝不提交（Runbook 见 README「Key 从哪来」）
+local-seed.json
+
+# 百度云同步的临时占位文件
+*.baiduyun.uploading.cfg
+
+# 系统垃圾
+.DS_Store
+
+# 打包产物
+*.zip
+build/

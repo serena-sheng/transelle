@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>翻译娘MARI · 设置</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <header class="hero">
+    <img class="hero-logo" src="../icons/icon-128.png" alt="翻译娘MARI" width="52" height="52" />
+    <div class="hero-text">
+      <h1>翻译娘MARI</h1>
+      <p>Transelle 内核 · 网页翻译 + 漫画翻译</p>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab is-active" data-tab="engines">引擎</button>
+    <button class="tab" data-tab="page">网页翻译</button>
+    <button class="tab" data-tab="manga">漫画翻译</button>
+    <button class="tab" data-tab="rules">站点特化</button>
+    <button class="tab" data-tab="about">关于</button>
+  </nav>
+
+  <main>
+    <!-- 引擎 -->
+    <section class="panel is-active" data-panel="engines">
+      <div class="panel-head">
+        <h2>翻译引擎</h2>
+        <div class="head-actions">
+          <button id="import-seed" class="btn">从本机种子导入 Key</button>
+          <button id="add-engine" class="btn btn-primary">+ 添加引擎</button>
+        </div>
+      </div>
+      <p class="hint">
+        三种引擎都走 OpenAI 兼容协议。Ollama 不需要 Key；DeepSeek 与自定义网关需要填 Key。
+        Key 只保存在本机浏览器存储里，不会上传到任何地方。
+        若扩展目录下放了 <code>local-seed.json</code>（本机私密种子，不入库），
+        首次启动会自动把 Key 灌进来，也可点上面的按钮手动重新导入。
+      </p>
+      <div id="engine-list" class="stack"></div>
+    </section>
+
+    <!-- 网页翻译 -->
+    <section class="panel" data-panel="page">
+      <h2>网页翻译</h2>
+      <p class="hint">按站点规则圈定元素后整页翻译；动态加载的内容会自动补翻。</p>
+
+      <label class="field row">
+        <span>打开网页时自动翻译</span>
+        <input type="checkbox" id="page-auto" />
+      </label>
+
+      <label class="field">
+        <span class="label">默认用于网页翻译的引擎</span>
+        <select id="page-engine"></select>
+      </label>
+
+      <label class="field">
+        <span class="label">显示方式</span>
+        <select id="page-mode">
+          <option value="bilingual">双语对照（原文 + 译文）</option>
+          <option value="only">仅显示译文</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="label">目标语言</span>
+        <select id="page-tolang">
+          <option value="zh-CN">简体中文</option>
+          <option value="zh-TW">繁体中文</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+        </select>
+      </label>
+
+      <label class="field row">
+        <span>给译文加浅色底纹（便于分辨）</span>
+        <input type="checkbox" id="page-highlight" />
+      </label>
+    </section>
+
+    <!-- 漫画翻译 -->
+    <section class="panel" data-panel="manga">
+      <h2>漫画翻译</h2>
+      <p class="hint">
+        检测页面里尺寸达标的图片，交给视觉模型识别气泡文字并翻译。
+        图片右下角的悬浮开关可循环切换「漫 → 幕 → 原」。
+      </p>
+
+      <label class="field">
+        <span class="label">打开漫画页面时的默认显示方式</span>
+        <select id="manga-mode">
+          <option value="overlay">嵌字（译文覆盖在气泡上）</option>
+          <option value="danmaku">侧栏弹幕（图片压窄，译文贴两侧）</option>
+          <option value="off">原图（先不显示，点开关再出）</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="label">视觉引擎（负责看图）</span>
+        <select id="manga-engine"></select>
+      </label>
+
+      <label class="field">
+        <span class="label">视觉模型名（留空则用该引擎的默认模型）</span>
+        <input type="text" id="manga-model" placeholder="例如 gpt-4o-mini / qwen2.5vl:7b" />
+      </label>
+
+      <div class="callout">
+        <strong>提示</strong>
+        漫画翻译需要真正能「看图」的模型。DeepSeek 官方文本接口不支持图片，
+        请把视觉引擎指向本地 Ollama 的多模态模型，或任何支持图片输入的 OpenAI 兼容网关，
+        并在上面的「视觉模型名」里写清模型 ID。
+      </div>
+    </section>
+
+    <!-- 站点特化 -->
+    <section class="panel" data-panel="rules">
+      <div class="panel-head">
+        <h2>站点特化规则</h2>
+        <button id="add-rule" class="btn btn-primary">+ 添加规则</button>
+      </div>
+      <p class="hint">
+        URL 命中 <code>pattern</code> 时启用该规则。pattern 支持逗号分隔多个，用 <code>*</code> 通配。
+        术语表每行写 <code>原文,译文</code>；译文留空表示保留原文。
+        个人规则按字段覆盖内置规则。
+      </p>
+
+      <h3 class="sub">内置规则（只读，代码内置，不会被网络同步覆盖）</h3>
+      <div id="builtin-list" class="stack"></div>
+
+      <h3 class="sub">我的规则</h3>
+      <div id="rule-list" class="stack"></div>
+    </section>
+
+    <!-- 关于 -->
+    <section class="panel" data-panel="about">
+      <h2>关于</h2>
+      <dl class="about">
+        <dt>名称</dt><dd>翻译娘MARI（Transelle）</dd>
+        <dt>版本</dt><dd id="about-version">-</dd>
+        <dt>内核</dt><dd>Transelle · 无构建原生 MV3</dd>
+        <dt>功能</dt>
+        <dd>网页整页翻译 · 漫画图片翻译（嵌字 / 弹幕侧栏）· 站点特化规则</dd>
+        <dt>引擎</dt><dd>DeepSeek · Ollama · 自定义 OpenAI 兼容</dd>
+      </dl>
+      <label class="field">
+        <span class="label">日志等级</span>
+        <select id="log-level">
+          <option value="silent">静默</option>
+          <option value="error">仅错误</option>
+          <option value="warn">警告</option>
+          <option value="info">常规</option>
+          <option value="debug">调试（排查问题用）</option>
+        </select>
+      </label>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../src/core/shared.js"></script>
+  <script src="../src/core/settings.js"></script>
+  <script src="../src/core/rules.js"></script>
+  <script src="../src/core/seed.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

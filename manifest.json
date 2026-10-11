@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "翻译娘MARI",
+  "short_name": "Transelle",
+  "version": "1.0.0",
+  "description": "Transelle 内核：网页整页翻译 + 漫画图片翻译（嵌字 / 弹幕侧栏），只保留 DeepSeek 与本地模型引擎，支持站点特化规则。",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "src/core/shared.js",
+        "src/core/settings.js",
+        "src/core/rules.js",
+        "src/page/collector.js",
+        "src/page/renderer.js",
+        "src/page/pageTranslator.js",
+        "src/manga/visionPrompt.js",
+        "src/manga/overlay.js",
+        "src/manga/mangaTranslator.js",
+        "src/content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_popup": "options/popup.html",
+    "default_title": "翻译娘MARI",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "options_page": "options/options.html"
+}
