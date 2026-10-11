@@ -41,8 +41,9 @@ Productivity
 | Asset | Dimensions | Status | Filename |
 |-------|-----------|--------|----------|
 | Store Icon [REQUIRED] | 128×128 PNG | ✅ Ready | `icons/icon-128.png` |
-| Screenshot 1 [REQUIRED] | 1280×800 or 640×400 | ⬜ Not created | |
-| Screenshot 2 [RECOMMENDED] | 1280×800 or 640×400 | ⬜ Not created | |
+| Screenshot 1 [REQUIRED] | 1280×800 | ✅ Ready（设置页·引擎） | `store/screenshot-01-options.png` |
+| Screenshot 2 [RECOMMENDED] | 1280×800 | ✅ Ready（设置页·漫画） | `store/screenshot-02-manga.png` |
+| Screenshot 3 [RECOMMENDED] | 1280×800 | ✅ Ready（工具栏面板） | `store/screenshot-03-popup.png` |
 | Small Promo Tile [RECOMMENDED] | 440×280 | ✅ Ready | `store/promo-440x280.png` |
 | Marquee Promo Tile | 1400×560 | ⬜ Not created | |
 
@@ -104,7 +105,7 @@ Productivity
 serena-sheng
 
 **Contact Email**
-<!-- TODO：填公开显示的联系邮箱 -->
+serenaamphistritesheng@outlook.com
 
 **Support URL / Email**
 https://github.com/serena-sheng/transelle/issues
@@ -116,7 +117,7 @@ https://github.com/serena-sheng/transelle
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
-| 1.0.1 | 2026-10-12 | 服务 worker 与内容脚本改用 async/await；popup 补 focus-visible 与 reduced-motion，命中区加大；加 440×280 促销图 | Draft |
+| 1.0.1 | 2026-10-12 | 服务 worker 与内容脚本改用 async/await；popup 补 focus-visible 与 reduced-motion，命中区加大；加 440×280 促销图与 3 张 1280×800 截图 | Draft |
 | 1.0.0 | — | 初版 | — |
 
 ## Review Notes
@@ -125,6 +126,11 @@ https://github.com/serena-sheng/transelle
 - `<all_urls>` 与 `scripting` 属宽权限，会拉长审核。理由：网页/漫画翻译必须覆盖任意站点。
 - 无远程代码：所有逻辑都在包内；翻译请求是数据（文本/图片），不是脚本。
 - 内容脚本以 `document_idle` 注入，未使用 `eval`。
+- **⚠ 成熟内容（务必处理）**：内置规则含成人漫画/视频站点（`src/core/rules.js` 的 `BUILTIN_RULES`），并附带成人向术语表与提示词（`ADULT_TERMS` / `ADULT_PROMPT`）。上架前需评估：
+  1. 商店「Mature & Sexually Explicit Material」政策 —— 极可能需要勾选 **Mature content**，且未登录用户搜索不到。
+  2. 2026-08-01 起执行的新政策禁止「绕过 AI 服务安全护栏」的扩展；`ADULT_PROMPT` 里「不得…拒绝」这类措辞可能被审核往这条上靠。建议改写为纯翻译风格要求，去掉「不得拒绝」的表述。
+  3. 商店截图**不要**展示「站点特化」页（会列出成人站点）。
+  备选方案：把成人站点规则与术语表改成用户手动导入，或从商店版移除、只在自用版保留。
 
 ### Rejection History
 | Date | Reason | Fix Applied | Resubmitted |
