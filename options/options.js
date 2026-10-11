@@ -224,32 +224,13 @@
   };
 
   // ---------- 站点规则 ----------
-  const renderBuiltin = () => {
-    const host = $("#builtin-list");
-    host.innerHTML = "";
-    T.BUILTIN_RULES.forEach((rule) => {
-      const card = document.createElement("div");
-      card.className = "builtin";
-      const tags = [];
-      if (rule.mangaEnabled) tags.push("漫画翻译");
-      if (rule.terms) tags.push(`术语 ${Object.keys(T.parseTerms(rule.terms)).length} 条`);
-      if (rule.prompt) tags.push("专属提示词");
-      card.innerHTML = `
-        <div class="pattern"></div>
-        <div class="meta">${tags.map((t) => `<span class="pill">${t}</span>`).join("")}</div>
-      `;
-      $(".pattern", card).textContent = rule.pattern;
-      host.appendChild(card);
-    });
-  };
-
   const renderRules = () => {
     const host = $("#rule-list");
     host.innerHTML = "";
 
     if (!settings.rules.length) {
       host.innerHTML =
-        '<p class="hint">还没有自定义规则。想让某个站在内置规则基础上改译法时再添加。</p>';
+        '<p class="hint">还没有规则。点右上角「添加规则」为特定站点定制译法与术语表。</p>';
       return;
     }
 
@@ -396,7 +377,6 @@
     renderEngines();
     renderPage();
     renderManga();
-    renderBuiltin();
     renderRules();
     bindActions();
   };

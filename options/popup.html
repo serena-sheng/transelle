@@ -65,17 +65,24 @@
     .row .v { font-weight: 600; font-size: 12px; }
     button {
       width: 100%; margin-top: 10px; padding: 10px;
+      min-height: 44px;
       border: 0; border-radius: 10px;
       background: var(--brand); color: #fff;
       font: inherit; font-size: 13px; font-weight: 600;
       cursor: pointer;
+      transition: opacity 0.15s ease;
     }
     button.ghost {
       background: transparent; color: var(--brand);
       border: 1px solid var(--line);
     }
     button:hover { opacity: 0.9; }
+    button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+    button:disabled { opacity: 0.5; cursor: default; }
     .note { margin-top: 10px; font-size: 11px; color: var(--text-dim); }
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; }
+    }
   </style>
 </head>
 <body>

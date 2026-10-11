@@ -92,17 +92,18 @@
 
     if (type === Transelle.MSG.TOGGLE_PAGE) {
       (async () => {
-        if (Transelle.pageTranslator.isRunning()) {
-          stopPageTranslation();
-          return { pageRunning: false };
+        try {
+          if (Transelle.pageTranslator.isRunning()) {
+            stopPageTranslation();
+            sendResponse({ ok: true, data: { pageRunning: false } });
+            return;
+          }
+          const ok = await startPageTranslation();
+          sendResponse({ ok: true, data: { pageRunning: ok } });
+        } catch (err) {
+          sendResponse({ ok: false, error: err?.message || String(err) });
         }
-        const ok = await startPageTranslation();
-        return { pageRunning: ok };
-      })()
-        .then((data) => sendResponse({ ok: true, data }))
-        .catch((err) =>
-          sendResponse({ ok: false, error: err?.message || String(err) })
-        );
+      })();
       return true; // 异步响应，保持通道
     }
 
