@@ -90,7 +90,7 @@ Productivity
 ## Privacy Policy
 
 **Privacy Policy URL**
-<!-- TODO：托管到 GitHub Pages 或任一公开 URL -->
+https://serena-sheng.github.io/chrome-ext-privacy/transelle.html
 
 > 本扩展不收集、不存储、不传输任何用户个人信息。翻译所需的网页文本与图片，仅由你的浏览器直接发往你在设置中自行选择的翻译服务，用于生成译文；扩展不保留这些内容，也不向任何其他第三方共享。API Key 与站点规则仅保存在本机浏览器存储中，不会上传。
 
