@@ -8,6 +8,7 @@
 importScripts(
   "./core/shared.js",
   "./core/settings.js",
+  "./core/romaji.js",
   "./core/engines.js",
   "./core/ja.js",
   "./core/seed.js"

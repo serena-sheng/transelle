@@ -1,8 +1,8 @@
 # 本机私密种子：含 API Key，绝不提交（Runbook 见 README「Key 从哪来」）
 local-seed.json
 
-# 本机日语 / 二次元专用设置：外部注入，不入库、不进发布包
-local-ja.json
+# 本机日语 / 二次元专用设置：外部注入，不入库、不进发布包（多份可共存）
+local-ja*.json
 
 # 百度云同步的临时占位文件
 *.baiduyun.uploading.cfg

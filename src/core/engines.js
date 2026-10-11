@@ -363,17 +363,17 @@
     // 日语（含二次元文本）补充：由外部文件 local-ja.json 提供更专的提示词与术语表，
     // 只在本批出现日文假名时启用；用户自己写的站点规则优先于它。
     let effectiveRule = rule;
-    let jaActive = false;
+    let jaCfg = null;
     if (Transelle.ja && list.some((t) => Transelle.hasKana(t))) {
-      const ja = await Transelle.ja.get();
-      if (ja) {
+      jaCfg = await Transelle.ja.get();
+      if (jaCfg) {
         effectiveRule = {
-          terms: [ja.terms, rule.terms].filter(Boolean).join("\n"),
-          prompt: [ja.prompt, rule.prompt].filter(Boolean).join("\n"),
+          terms: [jaCfg.terms, rule.terms].filter(Boolean).join("\n"),
+          prompt: [jaCfg.prompt, rule.prompt].filter(Boolean).join("\n"),
         };
-        jaActive = true;
       }
     }
+    const jaActive = !!jaCfg;
 
     const system = buildSystemPrompt(toLang, effectiveRule);
     const user = JSON.stringify(list);
@@ -455,6 +455,20 @@
           }
         } catch (err) {
           Transelle.log?.warn?.("假名残留重译失败，保留原译文:", err.message);
+        }
+      }
+
+      // 重译之后仍残留假名（多为难译的片假名，或日语里毫无意义的假名拼合）：
+      // 按配置转成罗马音呈现，总好过在中文里留一串看不懂的字。
+      if (jaCfg.romaji !== false && Transelle.toRomaji) {
+        let converted = 0;
+        out = out.map((v) => {
+          if (!Transelle.hasKana(v)) return v;
+          converted++;
+          return Transelle.toRomaji(v);
+        });
+        if (converted) {
+          Transelle.log?.info?.(`残留假名已转罗马音：${converted} 条`);
         }
       }
     }
