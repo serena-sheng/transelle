@@ -17,6 +17,14 @@
       needsKey: true,
       hint: "官方 API，需要 Key。默认 deepseek-flash；视觉请填支持图片的模型名。",
     },
+    hymt2: {
+      type: "hymt2",
+      name: "混元 Hy-MT2（腾讯 TokenHub）",
+      baseUrl: "https://tokenhub.tencentmaas.com/v1",
+      model: "hy-mt2-pro",
+      needsKey: true,
+      hint: "翻译专用模型（30B-A3B），OpenAI 兼容；在腾讯云 TokenHub 控制台取 API Key。",
+    },
     ollama: {
       type: "ollama",
       name: "Ollama（本地）",

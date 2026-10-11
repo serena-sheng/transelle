@@ -64,6 +64,7 @@
 | 类型 | 默认地址 | 默认模型 | 需要 Key |
 | --- | --- | --- | --- |
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-flash` | 是 |
+| 混元 Hy-MT2（腾讯 TokenHub） | `https://tokenhub.tencentmaas.com/v1` | `hy-mt2-pro` | 是 |
 | Ollama（本地） | `http://localhost:11434/v1` | `qwen2.5:7b` | 否 |
 | 自定义（OpenAI 兼容） | `http://localhost:1234/v1` | 自行填写 | 视网关而定 |
 
