@@ -90,13 +90,27 @@
       const finish = (unit, text) => {
         const value = typeof text === "string" && text.trim() ? text : unit.text;
         cache.set(unit.key, value);
+        // 与原文相同（例如简体→简体）就不注入，避免页面上多出重复的一行
+        if (Transelle.sameText(value, unit.text)) return;
         unit.nodes.forEach((n) => emit(n, value));
       };
 
       const all = [...groups.values()];
       const useRouting = routing?.enabled !== false;
-      const deepUnits = useRouting ? all.filter((u) => u.tier === "deep") : all;
-      const fastUnits = useRouting ? all.filter((u) => u.tier === "fast") : [];
+      // 目标语言是中文时，中文互转（简体 ↔ 各类繁体）一律走免费机翻，且统一输出简体
+      const zhTarget = /^zh/i.test(String(toLang || ""));
+      const deepUnits = [];
+      const freeGroups = new Map(); // "语言|类型" -> units[]
+      const addFree = (key, unit) => {
+        if (!freeGroups.has(key)) freeGroups.set(key, []);
+        freeGroups.get(key).push(unit);
+      };
+      all.forEach((unit) => {
+        const chinese = zhTarget && Transelle.isChinese(unit.text);
+        if (chinese) addFree("zh-CN|zh", unit); // 中文互转：统一翻成简体
+        else if (!useRouting || unit.tier === "deep") deepUnits.push(unit);
+        else addFree(`${toLang}|fast`, unit);
+      });
 
       report({ phase: "progress", done, total });
 
@@ -144,31 +158,37 @@
         }
       };
 
-      // 边角：免费机翻；机翻不可用时退回精翻，保证页面仍被翻译（这一次不省）
-      const fastHandler = async (batch) => {
+      // 免费机翻池（按目标语言分组）。allowFallback=false 的是中文互转：
+      // 服务不可用时保留原文，不退回 DeepSeek（中文互转一律不走 DeepSeek）。
+      const fastHandlerFor = (tl, allowFallback) => async (batch) => {
         const texts = batch.map((u) => u.text);
         try {
           const translated = await Transelle.send(Transelle.MSG.TRANSLATE_FAST, {
             texts,
-            toLang,
+            toLang: tl,
             provider: routing?.fast || "google",
           });
           batch.forEach((unit, idx) => finish(unit, translated[idx]));
         } catch (err) {
-          Transelle.log.warn("机翻失败，该批退回精翻:", err?.message || err);
+          Transelle.log.warn("机翻失败:", err?.message || err);
+          if (!allowFallback) return; // 中文互转：保留原文即可
           const translated = await Transelle.send(Transelle.MSG.TRANSLATE, {
             texts,
-            toLang,
+            toLang: tl,
             rule: { terms: rule.terms, prompt: rule.prompt },
           });
           batch.forEach((unit, idx) => finish(unit, translated[idx]));
         }
       };
 
-      await Promise.all([
-        runPool(deepUnits, BATCH_SIZE, CONCURRENCY, deepHandler),
-        runPool(fastUnits, FAST_BATCH_SIZE, FAST_CONCURRENCY, fastHandler),
-      ]);
+      const runs = [runPool(deepUnits, BATCH_SIZE, CONCURRENCY, deepHandler)];
+      freeGroups.forEach((units, key) => {
+        const [tl, kind] = key.split("|");
+        runs.push(
+          runPool(units, FAST_BATCH_SIZE, FAST_CONCURRENCY, fastHandlerFor(tl, kind !== "zh"))
+        );
+      });
+      await Promise.all(runs);
     };
 
     const runOnce = async (scope = document) => {

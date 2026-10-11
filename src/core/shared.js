@@ -144,6 +144,27 @@
   };
 
   /**
+   * 是否以汉字为主（排除日文假名 / 韩文谚文）。
+   * 用于把「中文互转」（简体 ↔ 各类繁体）分流到免费机翻，不走精翻引擎。
+   */
+  const HAN_RE = /[\u3400-\u4dbf\u4e00-\u9fff]/;
+  const KANA_RE = /[\u3040-\u30ff]/;
+  const HANGUL_RE = /[\uac00-\ud7af]/;
+  Transelle.isChinese = (text) => {
+    const s = String(text || "");
+    if (!HAN_RE.test(s)) return false;
+    if (KANA_RE.test(s) || HANGUL_RE.test(s)) return false; // 日文/韩文不算中文
+    const han = (s.match(/[\u3400-\u4dbf\u4e00-\u9fff]/g) || []).length;
+    const latin = s.match(/[A-Za-z]/g)?.length || 0;
+    return han >= 2 && han >= latin;
+  };
+
+  /** 折叠空白后比较两段文本是否相同（判断译文是否与原文一致，一致就不必注入） */
+  Transelle.sameText = (a, b) =>
+    String(a || "").replace(/\s+/g, " ").trim() ===
+    String(b || "").replace(/\s+/g, " ").trim();
+
+  /**
    * 向 background 发消息并解开 `{ok, data}` 包装。
    * 统一在这里抛错，调用方只需要 try/catch 一次。
    */
