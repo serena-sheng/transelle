@@ -159,10 +159,14 @@
     return han >= 2 && han >= latin;
   };
 
-  /** 折叠空白后比较两段文本是否相同（判断译文是否与原文一致，一致就不必注入） */
+  /**
+   * 判断两段文本是否「实质相同」——忽略空白与标点（全角/半角、中英标点都算）。
+   * 用于：译文若只是把原文的标点换了个写法（机翻端点常见的「原样返回」），
+   * 就不该当成译文注入页面。
+   */
+  const CORE_STRIP = /[\s\p{P}\p{S}]/gu;
   Transelle.sameText = (a, b) =>
-    String(a || "").replace(/\s+/g, " ").trim() ===
-    String(b || "").replace(/\s+/g, " ").trim();
+    String(a || "").replace(CORE_STRIP, "") === String(b || "").replace(CORE_STRIP, "");
 
   /**
    * 向 background 发消息并解开 `{ok, data}` 包装。

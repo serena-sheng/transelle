@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "翻译娘MARI",
   "short_name": "Transelle",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Transelle 内核：网页整页翻译 + 漫画图片翻译（嵌字 / 弹幕侧栏），只保留 DeepSeek 与本地模型引擎，支持站点特化规则。",
   "minimum_chrome_version": "116",
   "icons": {

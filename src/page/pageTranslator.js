@@ -62,7 +62,10 @@
       items.forEach(({ node, text, tier }) => {
         const key = Transelle.hash(text);
         if (cache.has(key)) {
-          onResult(node, cache.get(key)); // 缓存命中：立刻渲染，不占进度等待
+          // 缓存命中：立刻渲染，不占进度等待。但若缓存的「译文」与原文实质相同
+          // （机翻端点原样返回、只改了标点），就不注入。
+          const cached = cache.get(key);
+          if (!Transelle.sameText(cached, text)) onResult(node, cached);
           done++;
           return;
         }
