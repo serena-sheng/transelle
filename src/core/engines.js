@@ -100,6 +100,143 @@
     return content;
   };
 
+  /**
+   * 增量解析「JSON 字符串数组」的流。模型的 token 陆续到达，每凑齐一个完整的
+   * 字符串元素就回调一次 onItem(index, text)，让界面不必等整批生成完。
+   * 转义、\uXXXX、以及被切成两半的元素都能正确处理（没凑齐就等下一块）。
+   * @param {(index: number, text: string) => void} onItem
+   */
+  const createArrayStreamParser = (onItem) => {
+    let buf = "";
+    let i = 0; // 解析游标
+    let count = 0; // 已产出的元素个数
+    let started = false; // 是否已找到起始的 '['
+    const ESCAPES = { n: "\n", t: "\t", r: "\r", b: "\b", f: "\f", '"': '"', "\\": "\\", "/": "/" };
+
+    const pump = () => {
+      for (;;) {
+        while (i < buf.length && (buf[i] === " " || buf[i] === "\n" || buf[i] === "\r" || buf[i] === "\t" || buf[i] === ",")) i++;
+        if (i >= buf.length) return;
+        if (buf[i] === "]") return;
+        if (buf[i] !== '"') {
+          i++; // 容错：跳过意外字符（围栏符号等）
+          continue;
+        }
+        let j = i + 1;
+        let out = "";
+        let closed = false;
+        for (; j < buf.length; j++) {
+          const c = buf[j];
+          if (c === "\\") {
+            const n = buf[j + 1];
+            if (n === undefined) break; // 转义被切断，等下一块
+            if (n === "u") {
+              const hex = buf.slice(j + 2, j + 6);
+              if (hex.length < 4) break; // \uXXXX 未凑齐
+              out += String.fromCharCode(parseInt(hex, 16));
+              j += 5;
+            } else {
+              out += ESCAPES[n] ?? n;
+              j += 1;
+            }
+            continue;
+          }
+          if (c === '"') {
+            closed = true;
+            j += 1;
+            break;
+          }
+          out += c;
+        }
+        if (!closed) return; // 元素没收完，等下一块（下次从这里重算）
+        onItem(count++, out);
+        i = j;
+      }
+    };
+
+    return {
+      push(chunk) {
+        buf += chunk;
+        if (!started) {
+          const b = buf.indexOf("[");
+          if (b < 0) return;
+          started = true;
+          i = b + 1;
+        }
+        pump();
+      },
+    };
+  };
+
+  /**
+   * 流式 chat：逐块读 SSE，累积正文；若给了 onItem，则边收边增量解析数组。
+   * @returns {Promise<string>} 完整回复正文（与非流式一致的后续处理）
+   */
+  const chatStream = async (engine, messages, opts = {}, onItem) => {
+    const { timeout = DEFAULT_TEXT_TIMEOUT, maxTokens = 4096, temperature = 0.3 } = opts;
+    if (!engine || !engine.model) throw new Error("引擎未配置模型名");
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    let res;
+    try {
+      res = await fetch(endpointOf(engine.baseUrl), {
+        method: "POST",
+        headers: buildHeaders(engine),
+        body: JSON.stringify({
+          model: engine.model,
+          messages,
+          temperature,
+          max_tokens: maxTokens,
+          stream: true,
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err?.name === "AbortError") throw new Error(`请求超时（${Math.round(timeout / 1000)}s）`);
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) throw await readError(res);
+    if (!res.body) throw new Error("该引擎不支持流式响应");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    const parser = onItem ? createArrayStreamParser(onItem) : null;
+    let content = "";
+    let buf = "";
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line || !line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === "[DONE]") continue;
+          let json;
+          try {
+            json = JSON.parse(payload);
+          } catch {
+            continue;
+          }
+          const delta = json?.choices?.[0]?.delta?.content;
+          if (typeof delta === "string" && delta) {
+            content += delta;
+            parser?.push(delta);
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock?.();
+    }
+    return content;
+  };
+
   /** 从可能带 markdown 围栏 / 前后说明的文本里抠出 JSON */
   const extractJson = (text) => {
     const raw = String(text || "").trim();
@@ -161,19 +298,30 @@
    * @param {Object} [params.rule] 站点规则（术语表 / 补充提示词）
    * @returns {Promise<string[]>} 与输入等长的译文数组（失败位置为原文）
    */
-  const translate = async (engine, { texts = [], toLang = "zh-CN", rule = {} } = {}) => {
+  const translate = async (engine, { texts = [], toLang = "zh-CN", rule = {}, onItem } = {}) => {
     const list = texts.map((t) => String(t));
     if (!list.length) return [];
 
     const system = buildSystemPrompt(toLang, rule);
     const user = JSON.stringify(list);
-
-    // 请求本身失败（网络 / 超时 / 鉴权）：直接抛出。
-    // 逐条重试在这里毫无意义——Key 是错的，发 20 次还是错的，只会白烧配额。
-    const reply = await chat(engine, [
+    const messages = [
       { role: "system", content: system },
       { role: "user", content: user },
-    ]);
+    ];
+
+    // 流式优先：边生成边逐条推给界面，首句不必等整批生成完。
+    // 流式不可用（网关不支持）或中途出错时，退回非流式整批，别让整批译文丢掉。
+    let reply;
+    if (onItem) {
+      try {
+        reply = await chatStream(engine, messages, {}, (i, text) => {
+          if (i < list.length) onItem(i, text);
+        });
+      } catch (err) {
+        Transelle.log?.warn?.("流式翻译失败，回退非流式:", err.message);
+      }
+    }
+    if (reply === undefined) reply = await chat(engine, messages);
 
     const parsed = extractJson(reply);
     if (Array.isArray(parsed) && parsed.length === list.length) {
@@ -252,5 +400,5 @@
     return { ok: true, ms: Date.now() - started, sample: reply.trim().slice(0, 60) };
   };
 
-  Transelle.engines = { chat, translate, vision, test };
+  Transelle.engines = { chat, chatStream, translate, vision, test, createArrayStreamParser };
 })(typeof globalThis !== "undefined" ? globalThis : self);

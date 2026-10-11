@@ -59,11 +59,22 @@ const fetchImageAsDataUrl = async ({ url }) => {
 };
 
 const handlers = {
-  [T.MSG.TRANSLATE]: async ({ texts, toLang, rule }) => {
+  [T.MSG.TRANSLATE]: async ({ texts, toLang, rule, batchId }, sender) => {
     const settings = await T.settings.load();
     const engine = T.settings.resolveEngine(settings);
     if (!engine) throw new Error("未配置翻译引擎");
-    return T.engines.translate(engine, { texts, toLang, rule });
+    const tabId = sender?.tab?.id;
+    // 流式：每凑齐一条译文就推回内容脚本，界面不必等整批生成完。
+    // 推失败（标签页已关/已跳转）就忽略——最终整批结果仍会随响应返回。
+    const onItem =
+      batchId && tabId != null
+        ? (index, text) => {
+            chrome.tabs
+              .sendMessage(tabId, { type: T.MSG.TRANSLATE_DELTA, batchId, index, text })
+              .catch(() => {});
+          }
+        : undefined;
+    return T.engines.translate(engine, { texts, toLang, rule, onItem });
   },
 
   [T.MSG.VISION]: async ({ imageDataUrl, systemPrompt }) => {
@@ -78,14 +89,14 @@ const handlers = {
   [T.MSG.TEST_ENGINE]: async ({ engine }) => T.engines.test(engine),
 };
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handler = handlers[message?.type];
   if (!handler) return false;
 
   // 异步处理必须 return true 保持消息通道，否则响应会被丢弃
   (async () => {
     try {
-      const data = await handler(message);
+      const data = await handler(message, sender);
       sendResponse({ ok: true, data });
     } catch (err) {
       T.log.error("消息处理失败:", message?.type, err);

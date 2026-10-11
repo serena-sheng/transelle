@@ -16,6 +16,15 @@
   const CONCURRENCY = 6; // 同时在飞的批次数上限
   const MUTATION_DEBOUNCE = 600; // 动态内容补翻的防抖时间
 
+  // 流式增量：background 每译好一条就推回一个 TRANSLATE_DELTA，按 batchId 路由到对应批次
+  const deltaHandlers = new Map(); // batchId -> (index, text) => void
+  if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message?.type !== Transelle.MSG.TRANSLATE_DELTA) return;
+      deltaHandlers.get(message.batchId)?.(message.index, message.text);
+    });
+  }
+
   const createPageTranslator = () => {
     let running = false;
     let busy = false;
@@ -25,6 +34,7 @@
     let observer = null;
     let progressCb = null;
     let epoch = 0; // 每次 start/stop 自增；在飞的批次据此判断自己是否已过期
+    let batchSeq = 0; // 批次编号，用于把流式增量路由回对应批次
 
     const report = (payload) => {
       try {
@@ -64,6 +74,14 @@
         batches.push(units.slice(i, i + BATCH_SIZE));
       }
 
+      // 同一节点只渲染一次：流式已推过的，整批返回时不再重复注入
+      const emitted = new Set();
+      const emit = (node, text) => {
+        if (emitted.has(node)) return;
+        emitted.add(node);
+        onResult(node, text);
+      };
+
       report({ phase: "progress", done, total });
 
       let next = 0;
@@ -71,11 +89,20 @@
         while (next < batches.length) {
           const batch = batches[next++];
           const texts = batch.map((u) => u.text);
+          const batchId = `b${batchSeq++}`;
+          // 流式增量：哪条先译好就先渲染，不必等整批生成完
+          deltaHandlers.set(batchId, (index, text) => {
+            const unit = batch[index];
+            if (!unit) return;
+            const value = typeof text === "string" && text.trim() ? text : unit.text;
+            unit.nodes.forEach((n) => emit(n, value));
+          });
           try {
             const translated = await Transelle.send(Transelle.MSG.TRANSLATE, {
               texts,
               toLang,
               rule: { terms: rule.terms, prompt: rule.prompt },
+              batchId,
             });
             batch.forEach((unit, idx) => {
               const value = translated[idx];
@@ -83,13 +110,15 @@
               const finalText =
                 typeof value === "string" && value.trim() ? value : unit.text;
               cache.set(unit.key, finalText);
-              unit.nodes.forEach((n) => onResult(n, finalText));
+              unit.nodes.forEach((n) => emit(n, finalText));
             });
           } catch (err) {
             Transelle.log.error("批量翻译失败:", err.message);
             // 报给界面：否则用户只会看到「点了没反应」
             report({ phase: "error", message: `翻译失败：${err.message}` });
             // 该批失败：不写缓存，节点保持原文，等待下次重试
+          } finally {
+            deltaHandlers.delete(batchId);
           }
           done += batch.reduce((n, u) => n + u.nodes.length, 0);
           report({ phase: "progress", done, total });
