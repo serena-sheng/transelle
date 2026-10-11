@@ -314,9 +314,11 @@
     let reply;
     if (onItem) {
       try {
-        reply = await chatStream(engine, messages, {}, (i, text) => {
+        const streamed = await chatStream(engine, messages, {}, (i, text) => {
           if (i < list.length) onItem(i, text);
         });
+        // 有内容才采信；引擎忽略 stream、返回普通 JSON 时会得到空串，转非流式重来
+        if (streamed && streamed.trim()) reply = streamed;
       } catch (err) {
         Transelle.log?.warn?.("流式翻译失败，回退非流式:", err.message);
       }
