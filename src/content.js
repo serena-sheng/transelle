@@ -37,6 +37,7 @@
     await Transelle.pageTranslator.start({
       rule,
       toLang: settings.page.toLang,
+      routing: settings.page.routing,
     });
     return true;
   };

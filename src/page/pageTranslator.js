@@ -14,6 +14,8 @@
   // 连接上串行吐 20 条；拆成 10 条一批、6 批同时在飞，首屏与整页耗时就都下来了。
   const BATCH_SIZE = 10; // 单次请求交给模型的文本条数
   const CONCURRENCY = 6; // 同时在飞的批次数上限
+  const FAST_BATCH_SIZE = 20; // 免费机翻一次带的条数（端点支持多条 q）
+  const FAST_CONCURRENCY = 4; // 机翻并发（别打太猛，免得被限流）
   const MUTATION_DEBOUNCE = 600; // 动态内容补翻的防抖时间
 
   // 流式增量：background 每译好一条就推回一个 TRANSLATE_DELTA，按 batchId 路由到对应批次
@@ -35,6 +37,7 @@
     let progressCb = null;
     let epoch = 0; // 每次 start/stop 自增；在飞的批次据此判断自己是否已过期
     let batchSeq = 0; // 批次编号，用于把流式增量路由回对应批次
+    let routing = { enabled: true, fast: "google" }; // 是否按内容权重把边角降级到机翻
 
     const report = (payload) => {
       try {
@@ -45,9 +48,9 @@
     };
 
     /**
-     * 先用缓存命中，剩下的按批「并发」请求；每批一回来就回调渲染，
-     * 于是译文会一段段出现，而不是等全页跑完才一起冒出来。
-     * @param {Array<{node: Text, text: string}>} items
+     * 按内容权重分两档翻译：`deep`（正文）走精翻引擎，`fast`（边角）走免费机翻。
+     * 分档在 collector 里定好（见 weight.js）。两档各自并发，互不等待。
+     * @param {Array<{node: Text, text: string, tier: "deep"|"fast"}>} items
      * @param {(node: Text, translated: string) => void} onResult
      */
     const translateAll = async (items, onResult) => {
@@ -55,8 +58,8 @@
       let done = 0;
 
       // 按「文本哈希」归组：同一段文本出现多次只请求一次，但所有节点都要回填
-      const groups = new Map(); // key -> { text, key, nodes: Text[] }
-      items.forEach(({ node, text }) => {
+      const groups = new Map(); // key -> { text, key, nodes: Text[], tier }
+      items.forEach(({ node, text, tier }) => {
         const key = Transelle.hash(text);
         if (cache.has(key)) {
           onResult(node, cache.get(key)); // 缓存命中：立刻渲染，不占进度等待
@@ -64,15 +67,18 @@
           return;
         }
         const group = groups.get(key);
-        if (group) group.nodes.push(node);
-        else groups.set(key, { text, key, nodes: [node] });
+        if (group) {
+          group.nodes.push(node);
+          if (tier === "deep") group.tier = "deep"; // 只要有一处算正文，整段就精翻
+        } else {
+          groups.set(key, {
+            text,
+            key,
+            nodes: [node],
+            tier: tier === "fast" ? "fast" : "deep",
+          });
+        }
       });
-
-      const units = [...groups.values()];
-      const batches = [];
-      for (let i = 0; i < units.length; i += BATCH_SIZE) {
-        batches.push(units.slice(i, i + BATCH_SIZE));
-      }
 
       // 同一节点只渲染一次：流式已推过的，整批返回时不再重复注入
       const emitted = new Set();
@@ -81,53 +87,88 @@
         emitted.add(node);
         onResult(node, text);
       };
+      const finish = (unit, text) => {
+        const value = typeof text === "string" && text.trim() ? text : unit.text;
+        cache.set(unit.key, value);
+        unit.nodes.forEach((n) => emit(n, value));
+      };
+
+      const all = [...groups.values()];
+      const useRouting = routing?.enabled !== false;
+      const deepUnits = useRouting ? all.filter((u) => u.tier === "deep") : all;
+      const fastUnits = useRouting ? all.filter((u) => u.tier === "fast") : [];
 
       report({ phase: "progress", done, total });
 
-      let next = 0;
-      const worker = async () => {
-        while (next < batches.length) {
-          const batch = batches[next++];
-          const texts = batch.map((u) => u.text);
-          const batchId = `b${batchSeq++}`;
-          // 流式增量：哪条先译好就先渲染，不必等整批生成完
-          deltaHandlers.set(batchId, (index, text) => {
-            const unit = batch[index];
-            if (!unit) return;
-            const value = typeof text === "string" && text.trim() ? text : unit.text;
-            unit.nodes.forEach((n) => emit(n, value));
-          });
-          try {
-            const translated = await Transelle.send(Transelle.MSG.TRANSLATE, {
-              texts,
-              toLang,
-              rule: { terms: rule.terms, prompt: rule.prompt },
-              batchId,
-            });
-            batch.forEach((unit, idx) => {
-              const value = translated[idx];
-              // 模型返回空或长度不符时保留原文，避免出现空白
-              const finalText =
-                typeof value === "string" && value.trim() ? value : unit.text;
-              cache.set(unit.key, finalText);
-              unit.nodes.forEach((n) => emit(n, finalText));
-            });
-          } catch (err) {
-            Transelle.log.error("批量翻译失败:", err.message);
-            // 报给界面：否则用户只会看到「点了没反应」
-            report({ phase: "error", message: `翻译失败：${err.message}` });
-            // 该批失败：不写缓存，节点保持原文，等待下次重试
-          } finally {
-            deltaHandlers.delete(batchId);
+      /** 通用并发池：把 units 切成 size 大小的块，用 concurrency 个 worker 跑 */
+      const runPool = async (units, size, concurrency, handler) => {
+        const chunks = [];
+        for (let i = 0; i < units.length; i += size) chunks.push(units.slice(i, i + size));
+        let next = 0;
+        const worker = async () => {
+          while (next < chunks.length) {
+            const chunk = chunks[next++];
+            try {
+              await handler(chunk);
+            } catch (err) {
+              Transelle.log.error("翻译批次失败:", err?.message || err);
+              report({ phase: "error", message: `翻译失败：${err?.message || err}` });
+            }
+            done += chunk.reduce((n, u) => n + u.nodes.length, 0);
+            report({ phase: "progress", done, total });
           }
-          done += batch.reduce((n, u) => n + u.nodes.length, 0);
-          report({ phase: "progress", done, total });
+        };
+        await Promise.all(
+          Array.from({ length: Math.min(concurrency, chunks.length) }, worker)
+        );
+      };
+
+      // 正文：精翻（流式，边生成边回填）
+      const deepHandler = async (batch) => {
+        const texts = batch.map((u) => u.text);
+        const batchId = `b${batchSeq++}`;
+        deltaHandlers.set(batchId, (index, text) => {
+          const unit = batch[index];
+          if (unit) finish(unit, text);
+        });
+        try {
+          const translated = await Transelle.send(Transelle.MSG.TRANSLATE, {
+            texts,
+            toLang,
+            rule: { terms: rule.terms, prompt: rule.prompt },
+            batchId,
+          });
+          batch.forEach((unit, idx) => finish(unit, translated[idx]));
+        } finally {
+          deltaHandlers.delete(batchId);
         }
       };
 
-      await Promise.all(
-        Array.from({ length: Math.min(CONCURRENCY, batches.length) }, worker)
-      );
+      // 边角：免费机翻；机翻不可用时退回精翻，保证页面仍被翻译（这一次不省）
+      const fastHandler = async (batch) => {
+        const texts = batch.map((u) => u.text);
+        try {
+          const translated = await Transelle.send(Transelle.MSG.TRANSLATE_FAST, {
+            texts,
+            toLang,
+            provider: routing?.fast || "google",
+          });
+          batch.forEach((unit, idx) => finish(unit, translated[idx]));
+        } catch (err) {
+          Transelle.log.warn("机翻失败，该批退回精翻:", err?.message || err);
+          const translated = await Transelle.send(Transelle.MSG.TRANSLATE, {
+            texts,
+            toLang,
+            rule: { terms: rule.terms, prompt: rule.prompt },
+          });
+          batch.forEach((unit, idx) => finish(unit, translated[idx]));
+        }
+      };
+
+      await Promise.all([
+        runPool(deepUnits, BATCH_SIZE, CONCURRENCY, deepHandler),
+        runPool(fastUnits, FAST_BATCH_SIZE, FAST_CONCURRENCY, fastHandler),
+      ]);
     };
 
     const runOnce = async (scope = document) => {
@@ -195,9 +236,10 @@
         progressCb = cb;
       },
 
-      async start({ rule: nextRule, toLang: nextToLang } = {}) {
+      async start({ rule: nextRule, toLang: nextToLang, routing: nextRouting } = {}) {
         if (nextRule) rule = { ...Transelle.DEFAULT_RULE, ...nextRule };
         if (nextToLang) toLang = nextToLang;
+        if (nextRouting) routing = { ...routing, ...nextRouting };
         if (running) return;
 
         running = true;

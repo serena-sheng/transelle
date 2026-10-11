@@ -180,6 +180,8 @@
     $("#page-mode").value = p.mode;
     $("#page-tolang").value = p.toLang;
     $("#page-highlight").checked = !!p.highlight;
+    const routing = (p.routing = p.routing || { enabled: true, fast: "google" });
+    $("#page-routing").checked = routing.enabled !== false;
 
     $("#page-auto").addEventListener("change", (e) => {
       p.autoTranslate = e.target.checked;
@@ -195,6 +197,10 @@
     });
     $("#page-highlight").addEventListener("change", (e) => {
       p.highlight = e.target.checked;
+      saveDebounced();
+    });
+    $("#page-routing").addEventListener("change", (e) => {
+      p.routing = { ...routing, enabled: e.target.checked };
       saveDebounced();
     });
     $("#page-engine").addEventListener("change", (e) => {

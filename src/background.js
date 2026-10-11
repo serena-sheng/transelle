@@ -77,6 +77,9 @@ const handlers = {
     return T.engines.translate(engine, { texts, toLang, rule, onItem });
   },
 
+  [T.MSG.TRANSLATE_FAST]: async ({ texts, toLang, provider }) =>
+    T.engines.fastTranslate({ texts, toLang, provider }),
+
   [T.MSG.VISION]: async ({ imageDataUrl, systemPrompt }) => {
     const settings = await T.settings.load();
     const engine = T.settings.resolveVisionEngine(settings);

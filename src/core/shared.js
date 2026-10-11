@@ -15,6 +15,7 @@
     FETCH_IMAGE: "transelle:fetchImage", // 代理取图（规避 CORS / canvas 污染）
     TEST_ENGINE: "transelle:testEngine", // 设置页测试连接
     TRANSLATE_DELTA: "transelle:translateDelta", // 流式：背景逐条把译文推回内容脚本
+    TRANSLATE_FAST: "transelle:translateFast", // 免费机翻（Google / Microsoft），用于边角内容
     GET_ACTIVE_TAB: "transelle:getActiveTab",
     TOGGLE_PAGE: "transelle:togglePage",
     PAGE_STATE: "transelle:pageState",

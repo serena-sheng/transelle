@@ -57,7 +57,7 @@
      * 收集给定范围内的待翻译文本节点。
      * @param {Object} rule 站点规则（selector / ignoreSelector）
      * @param {Node} [scope] 限定范围的根节点，默认整篇文档
-     * @returns {Array<{node: Text, text: string}>}
+     * @returns {Array<{node: Text, text: string, tier: "deep"|"fast"}>}
      */
     collect(rule = {}, scope = document) {
       const selector = (rule.selector || "").trim() || Transelle.DEFAULT_SELECTOR;
@@ -105,7 +105,12 @@
           const dedupeKey = Transelle.hash(text);
           if (seenText.has(dedupeKey)) continue;
           seenText.add(dedupeKey);
-          out.push({ node, text });
+          out.push({
+            node,
+            text,
+            // 分流用：正文（deep）交给精翻引擎，边角（fast）交给免费机翻
+            tier: Transelle.weight ? Transelle.weight.tier(node.parentElement) : "deep",
+          });
         }
       });
 

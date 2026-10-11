@@ -13,9 +13,9 @@
       type: "deepseek",
       name: "DeepSeek",
       baseUrl: "https://api.deepseek.com/v1",
-      model: "deepseek-chat",
+      model: "deepseek-flash",
       needsKey: true,
-      hint: "官方 API，需要 Key。视觉请填支持图片的模型名（如自建网关的 VL 模型）。",
+      hint: "官方 API，需要 Key。默认 deepseek-flash；视觉请填支持图片的模型名。",
     },
     ollama: {
       type: "ollama",
@@ -45,7 +45,7 @@
         name: "DeepSeek",
         baseUrl: "https://api.deepseek.com/v1",
         apiKey: "",
-        model: "deepseek-chat",
+        model: "deepseek-flash",
       },
     ],
     /** 网页翻译用哪个引擎 */
@@ -59,6 +59,11 @@
       mode: "bilingual", // bilingual=原文+译文对照；only=仅显示译文
       toLang: "zh-CN", // 目标语言
       highlight: false, // 是否给译文加浅色底纹，便于一眼分辨
+      // 分流：正文（阅读主体）才交给 DeepSeek 精翻，边角（导航/页脚/侧栏等）交给免费机翻
+      routing: {
+        enabled: true,
+        fast: "google", // 免费机翻服务商：google
+      },
     },
     manga: {
       mode: "overlay", // overlay=嵌字；danmaku=侧栏弹幕；off=关闭（记住用户上次选择）
@@ -85,7 +90,11 @@
       const merged = {
         ...base,
         ...raw,
-        page: { ...base.page, ...(raw.page || {}) },
+        page: {
+          ...base.page,
+          ...(raw.page || {}),
+          routing: { ...base.page.routing, ...((raw.page || {}).routing || {}) },
+        },
         manga: { ...base.manga, ...(raw.manga || {}) },
         engines:
           Array.isArray(raw.engines) && raw.engines.length

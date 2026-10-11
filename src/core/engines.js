@@ -237,6 +237,55 @@
     return content;
   };
 
+  // --- 免费机翻（Google gtx 端点）：边角内容走这里，不消耗 DeepSeek 配额 ---
+  const GOOGLE_T = "https://translate.googleapis.com/translate_a/t";
+
+  /**
+   * 免费机翻。Google 的 gtx `/translate_a/t` 支持一次 POST 多条 `q`，
+   * 并按输入顺序返回等长的 `[[译文, 检测语言], ...]`。
+   * @param {Object} params
+   * @param {string[]} params.texts
+   * @param {string} [params.toLang]
+   * @param {string} [params.provider] 目前仅 "google"
+   * @returns {Promise<string[]>} 与输入等长的译文（失败位置保留原文）
+   */
+  const fastTranslate = async ({ texts = [], toLang = "zh-CN", provider = "google" } = {}) => {
+    const list = texts.map((t) => String(t));
+    if (!list.length) return [];
+    if (provider !== "google") throw new Error(`不支持的机翻服务商：${provider}`);
+
+    const tl = GOOGLE_LANG[toLang] || toLang || "zh-CN";
+    const url = `${GOOGLE_T}?client=gtx&sl=auto&tl=${encodeURIComponent(tl)}`;
+    const body = list.map((t) => `q=${encodeURIComponent(t)}`).join("&");
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err?.name === "AbortError") throw new Error("机翻超时");
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) throw new Error(`机翻 HTTP ${res.status}`);
+
+    const data = await res.json().catch(() => null);
+    if (!Array.isArray(data) || data.length !== list.length) {
+      throw new Error("机翻返回条数不符");
+    }
+    return data.map((row, i) => {
+      const text = Array.isArray(row) ? row[0] : row;
+      return typeof text === "string" && text.trim() ? text : list[i];
+    });
+  };
+
   /** 从可能带 markdown 围栏 / 前后说明的文本里抠出 JSON */
   const extractJson = (text) => {
     const raw = String(text || "").trim();
@@ -262,6 +311,15 @@
     en: "English",
     ja: "日本語",
     ko: "한국어",
+  };
+
+  // Google gtx 的语言码与上面基本一致，个别做映射
+  const GOOGLE_LANG = {
+    "zh-CN": "zh-CN",
+    "zh-TW": "zh-TW",
+    en: "en",
+    ja: "ja",
+    ko: "ko",
   };
 
   const buildSystemPrompt = (toLang, rule) => {
@@ -402,5 +460,5 @@
     return { ok: true, ms: Date.now() - started, sample: reply.trim().slice(0, 60) };
   };
 
-  Transelle.engines = { chat, chatStream, translate, vision, test, createArrayStreamParser };
+  Transelle.engines = { chat, chatStream, translate, fastTranslate, vision, test, createArrayStreamParser };
 })(typeof globalThis !== "undefined" ? globalThis : self);
