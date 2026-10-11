@@ -14,20 +14,27 @@ importScripts(
 
 const T = globalThis.Transelle;
 
-T.settings.load()
-  .then((s) => T.setLogLevel(s.logLevel))
-  .catch(() => {});
+(async () => {
+  try {
+    const s = await T.settings.load();
+    T.setLogLevel(s.logLevel);
+  } catch {
+    /* 读设置失败不阻塞启动 */
+  }
+})();
 
 T.settings.onChange((s) => T.setLogLevel(s.logLevel));
 
 // 本机种子：把 local-seed.json 里的 Key 灌进设置。没有这个文件（例如从 GitHub
 // 克隆的副本）就静默跳过，不影响任何功能。
-T.seed
-  .apply()
-  .then(({ applied }) => {
+(async () => {
+  try {
+    const { applied } = await T.seed.apply();
     if (applied) T.log.info(`本机种子：已导入 ${applied} 个引擎的 Key`);
-  })
-  .catch(() => {});
+  } catch {
+    /* 无种子文件即跳过 */
+  }
+})();
 
 /** ArrayBuffer → base64（Service Worker 里没有 FileReader，手工分块编码） */
 const toBase64 = (buffer) => {
@@ -76,12 +83,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!handler) return false;
 
   // 异步处理必须 return true 保持消息通道，否则响应会被丢弃
-  Promise.resolve()
-    .then(() => handler(message))
-    .then((data) => sendResponse({ ok: true, data }))
-    .catch((err) => {
+  (async () => {
+    try {
+      const data = await handler(message);
+      sendResponse({ ok: true, data });
+    } catch (err) {
       T.log.error("消息处理失败:", message?.type, err);
       sendResponse({ ok: false, error: err?.message || String(err) });
-    });
+    }
+  })();
   return true;
 });
