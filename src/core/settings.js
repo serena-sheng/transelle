@@ -72,7 +72,8 @@
       // 分流：正文（阅读主体）才交给 DeepSeek 精翻，边角（导航/页脚/侧栏等）交给免费机翻
       routing: {
         enabled: true,
-        fast: "google", // 免费机翻服务商：google
+        // 机翻服务商：ondevice = 浏览器内置设备翻译（Chrome 138+；本机 ego lite 建不了翻译器，故默认仍走 google）
+        fast: "google",
       },
     },
     manga: {

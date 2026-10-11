@@ -90,6 +90,23 @@
         <span class="label">并发批次数（1–64；DeepSeek flash 账号上限 2500）</span>
         <input type="number" id="page-concurrency" min="1" max="64" step="1" />
       </label>
+
+      <label class="field">
+        <span class="label">边角内容的机翻服务商</span>
+        <select id="page-fast">
+          <option value="ondevice">浏览器内置设备翻译（推荐 · 不走网络）</option>
+          <option value="google">Google 免费端点</option>
+        </select>
+      </label>
+
+      <div class="panel-head">
+        <span class="label">设备翻译语言包</span>
+        <button id="download-ondevice" class="btn btn-primary">下载语言包</button>
+      </div>
+      <p class="hint" id="ondevice-hint">
+        设备内翻译按语种对下载语言包，首次必须在本页点一下按钮（浏览器要求用户手势）；
+        下好之前，边角内容会自动先走 Google。
+      </p>
     </section>
 
     <!-- 漫画翻译 -->

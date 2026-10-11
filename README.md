@@ -34,8 +34,12 @@
   边角（导航、页脚、侧栏、相关推荐等）交给免费机翻（Google）；机翻不可用时自动退回精翻。实测一页只有约一半文本落到 DeepSeek
 - **中文互转始终走免费机翻**：目标语言是中文时，简体 ↔ 各类繁体一律交给免费机翻并统一输出简体（不走 DeepSeek）；
   本来就是简体、无需转换的段落直接跳过，既不请求也不注入译文
-- **日语（含二次元文本）专用设置**：外部 `local-ja.json` 注入术语表与提示词，要求全文中文化、不残留假名；
+- **日语（含二次元文本）专用设置**：外部 `local-ja*.json` 注入术语表与提示词，要求全文中文化、不残留假名；
   译完仍夹带假名时只对那几条强制重译
+- **英语成人向专用设置**：外部 `local-en*.json`，**只在判定为成人向内容时**才注入（普通英文页不塞）
+- **可选：边角内容用浏览器内置的设备内翻译**（Chrome 138+ 的 `Translator` API）：不走网络、免费、内容不出本机。
+  **默认仍走 Google**——本机 ego lite 虽然暴露了这个 API，但 `create()` 会抛 `NotSupportedError`（拿不到可用模型）。
+  在设置里切到「设备翻译」后：未就绪或失败会自动回退 Google，并在 `<html>` 留一个 `data-transelle-od` 状态位便于排查
 - 页面滚动预取 + MutationObserver 兜底懒加载内容
 - 译文缓存按文本哈希去重，同一段落不重复计费
 
@@ -214,6 +218,8 @@ src/
     locales.js           分语种外部设置（local-ja*.json / local-en*.json）的读取与合并
     romaji.js            假名 → 罗马音（本地换算，兜底难译假名）
   page/
+    weight.js            内容权重打分（正文 / 边角）
+    ondevice.js          浏览器内置设备内翻译（Translator API）
     collector.js         挑出待翻译文本节点
     renderer.js          插入译文、双语/仅译文切换、页内提示
     pageTranslator.js    批量调度、缓存、MutationObserver

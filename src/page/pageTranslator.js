@@ -168,11 +168,28 @@
       // 服务不可用时保留原文，不退回 DeepSeek（中文互转一律不走 DeepSeek）。
       const fastHandlerFor = (tl, allowFallback) => async (batch) => {
         const texts = batch.map((u) => u.text);
+
+        // 优先用浏览器内置的设备内翻译：不走网络、免费、延迟接近零。
+        // 语言包还没下好时 pick() 返回 null，会自动落到下面的免费机翻。
+        if ((routing?.fast || "ondevice") === "ondevice" && Transelle.onDevice) {
+          try {
+            const picked = await Transelle.onDevice.pick(texts, tl);
+            if (picked) {
+              const translated = await Transelle.onDevice.translate(texts, picked);
+              batch.forEach((unit, idx) => finish(unit, translated[idx]));
+              return;
+            }
+          } catch (err) {
+            Transelle.log.warn("设备内置翻译失败，回退机翻:", err?.message || err);
+          }
+        }
+
         try {
           const translated = await Transelle.send(Transelle.MSG.TRANSLATE_FAST, {
             texts,
             toLang: tl,
-            provider: routing?.fast || "google",
+            // "ondevice" 只是「优先设备内」，真正发出去的时候还是走免费机翻端点
+            provider: routing?.fast === "ondevice" ? "google" : routing?.fast || "google",
           });
           batch.forEach((unit, idx) => finish(unit, translated[idx]));
         } catch (err) {

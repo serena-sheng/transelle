@@ -182,6 +182,7 @@
     $("#page-highlight").checked = !!p.highlight;
     const routing = (p.routing = p.routing || { enabled: true, fast: "google" });
     $("#page-routing").checked = routing.enabled !== false;
+    $("#page-fast").value = routing.fast || "google";
     $("#page-concurrency").value = p.concurrency || 16;
 
     $("#page-auto").addEventListener("change", (e) => {
@@ -209,6 +210,50 @@
       p.concurrency = Number.isFinite(n) ? Math.min(64, Math.max(1, Math.round(n))) : 16;
       e.target.value = p.concurrency;
       saveDebounced();
+    });
+    $("#page-fast").addEventListener("change", (e) => {
+      p.routing = { ...routing, fast: e.target.value };
+      saveDebounced();
+    });
+    $("#download-ondevice").addEventListener("click", async () => {
+      const hint = $("#ondevice-hint");
+      const btn = $("#download-ondevice");
+      if (typeof Translator === "undefined") {
+        hint.textContent = "这台浏览器不支持设备内置翻译（需要 Chrome 138+ 桌面版）。";
+        return;
+      }
+      const MAP = { "zh-CN": "zh", "zh-TW": "zh-Hant", en: "en", ja: "ja", ko: "ko" };
+      const target = MAP[p.toLang] || p.toLang;
+      const sources = ["en", "ja", "ko", "zh-Hant"].filter((s) => s !== target);
+      btn.disabled = true;
+      try {
+        for (const source of sources) {
+          hint.textContent = `检查 ${source} → ${target} …`;
+          const av = await Translator.availability({ sourceLanguage: source, targetLanguage: target });
+          if (av === "available") {
+            hint.textContent = `${source} → ${target} 已就绪`;
+            continue;
+          }
+          if (av === "unavailable") {
+            hint.textContent = `${source} → ${target} 不支持`;
+            continue;
+          }
+          await Translator.create({
+            sourceLanguage: source,
+            targetLanguage: target,
+            monitor(m) {
+              m.addEventListener("downloadprogress", (e) => {
+                hint.textContent = `下载 ${source} → ${target}：${Math.round((e.loaded || 0) * 100)}%`;
+              });
+            },
+          });
+        }
+        hint.textContent = "语言包已就绪：之后边角内容会优先走设备内翻译（不走网络）。";
+      } catch (err) {
+        hint.textContent = `下载失败：${err?.message || err}`;
+      } finally {
+        btn.disabled = false;
+      }
     });
     $("#page-engine").addEventListener("change", (e) => {
       settings.engineId = e.target.value;
