@@ -65,9 +65,8 @@
 
 ### 站点特化
 
-内置三组规则，直接写在 `src/core/rules.js` 里：
+内置两组规则，直接写在 `src/core/rules.js` 里：
 
-- **成人向漫画站**（含 `wnacg.com` 等）：开启漫画模式，附 63 条日文/英文术语表与专属提示词
 - **代码托管**（`github.com`）：技术术语表，避免把 API / commit / branch 译成奇怪的中文
 - **财经新闻**（reuters / bloomberg / ft / economist 等）：金融术语表与新闻语气
 
@@ -75,9 +74,9 @@
 
 ```js
 {
-  pattern: "wnacg.com",   // 逗号或换行分隔多个模式，支持 * 通配
+  pattern: "github.com",  // 逗号或换行分隔多个模式，支持 * 通配
   pageEnabled: true,      // 是否做整页翻译
-  mangaEnabled: true,     // 是否做漫画翻译
+  mangaEnabled: false,    // 是否做漫画翻译
   selector: "",           // 待翻译元素，留空用默认
   ignoreSelector: "",     // 忽略元素，留空用默认
   terms: "原文,译文\n...", // 术语表，一行一条

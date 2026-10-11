@@ -117,7 +117,7 @@ https://github.com/serena-sheng/transelle
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
-| 1.0.1 | 2026-10-12 | 服务 worker 与内容脚本改用 async/await；popup 补 focus-visible 与 reduced-motion，命中区加大；加 440×280 促销图与 3 张 1280×800 截图 | Draft |
+| 1.0.1 | 2026-10-12 | 服务 worker 与内容脚本改用 async/await；popup 补 focus-visible 与 reduced-motion，命中区加大；**移除全部成人向内容（站点规则 / 术语表 / 提示词）**；加 440×280 促销图与 3 张 1280×800 截图 | Draft |
 | 1.0.0 | — | 初版 | — |
 
 ## Review Notes
@@ -126,11 +126,7 @@ https://github.com/serena-sheng/transelle
 - `<all_urls>` 与 `scripting` 属宽权限，会拉长审核。理由：网页/漫画翻译必须覆盖任意站点。
 - 无远程代码：所有逻辑都在包内；翻译请求是数据（文本/图片），不是脚本。
 - 内容脚本以 `document_idle` 注入，未使用 `eval`。
-- **⚠ 成熟内容（务必处理）**：内置规则含成人漫画/视频站点（`src/core/rules.js` 的 `BUILTIN_RULES`），并附带成人向术语表与提示词（`ADULT_TERMS` / `ADULT_PROMPT`）。上架前需评估：
-  1. 商店「Mature & Sexually Explicit Material」政策 —— 极可能需要勾选 **Mature content**，且未登录用户搜索不到。
-  2. 2026-08-01 起执行的新政策禁止「绕过 AI 服务安全护栏」的扩展；`ADULT_PROMPT` 里「不得…拒绝」这类措辞可能被审核往这条上靠。建议改写为纯翻译风格要求，去掉「不得拒绝」的表述。
-  3. 商店截图**不要**展示「站点特化」页（会列出成人站点）。
-  备选方案：把成人站点规则与术语表改成用户手动导入，或从商店版移除、只在自用版保留。
+- 内容合规：2026-10-12 已移除全部成人向内容——成人站点内置规则、露骨术语表、成人向提示词均已删除，`visionPrompt` 中的露骨措辞一并改为中性表述。当前版本不含任何成人内容，无「成熟内容」标记需求。
 
 ### Rejection History
 | Date | Reason | Fix Applied | Resubmitted |
