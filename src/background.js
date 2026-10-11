@@ -9,6 +9,7 @@ importScripts(
   "./core/shared.js",
   "./core/settings.js",
   "./core/engines.js",
+  "./core/ja.js",
   "./core/seed.js"
 );
 

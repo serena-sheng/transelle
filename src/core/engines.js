@@ -360,7 +360,22 @@
     const list = texts.map((t) => String(t));
     if (!list.length) return [];
 
-    const system = buildSystemPrompt(toLang, rule);
+    // 日语（含二次元文本）补充：由外部文件 local-ja.json 提供更专的提示词与术语表，
+    // 只在本批出现日文假名时启用；用户自己写的站点规则优先于它。
+    let effectiveRule = rule;
+    let jaActive = false;
+    if (Transelle.ja && list.some((t) => Transelle.hasKana(t))) {
+      const ja = await Transelle.ja.get();
+      if (ja) {
+        effectiveRule = {
+          terms: [ja.terms, rule.terms].filter(Boolean).join("\n"),
+          prompt: [ja.prompt, rule.prompt].filter(Boolean).join("\n"),
+        };
+        jaActive = true;
+      }
+    }
+
+    const system = buildSystemPrompt(toLang, effectiveRule);
     const user = JSON.stringify(list);
     const messages = [
       { role: "system", content: system },
@@ -370,7 +385,8 @@
     // 流式优先：边生成边逐条推给界面，首句不必等整批生成完。
     // 流式不可用（网关不支持）或中途出错时，退回非流式整批，别让整批译文丢掉。
     let reply;
-    if (onItem) {
+    // 日语批次不走流式：残留假名的「重译」发生在整批之后，流式已回填的就没法再纠正。
+    if (onItem && !jaActive) {
       try {
         const streamed = await chatStream(engine, messages, {}, (i, text) => {
           if (i < list.length) onItem(i, text);
@@ -384,38 +400,65 @@
     if (reply === undefined) reply = await chat(engine, messages);
 
     const parsed = extractJson(reply);
+    let out;
     if (Array.isArray(parsed) && parsed.length === list.length) {
-      return parsed.map((v, i) => (typeof v === "string" && v.trim() ? v : list[i]));
+      out = parsed.map((v, i) => (typeof v === "string" && v.trim() ? v : list[i]));
+    } else {
+      // 拿到了回复但格式不符（条数不对 / 不是 JSON）：这才值得逐条重试
+      out = [];
+      let failed = 0;
+      let lastError = null;
+      for (const text of list) {
+        try {
+          const one = extractJson(
+            await chat(engine, [
+              { role: "system", content: buildSystemPrompt(toLang, effectiveRule) },
+              { role: "user", content: JSON.stringify([text]) },
+            ])
+          );
+          if (Array.isArray(one) && typeof one[0] === "string" && one[0].trim()) {
+            out.push(one[0]);
+          } else {
+            out.push(text);
+            failed++;
+          }
+        } catch (err) {
+          lastError = err;
+          failed++;
+          out.push(text);
+        }
+      }
+      // 全军覆没就抛出去，让界面明确报错；
+      // 部分失败则静默保留原文，不因为个别段落坏掉就中断整页翻译。
+      if (failed === list.length && lastError) throw lastError;
     }
 
-    // 拿到了回复但格式不符（条数不对 / 不是 JSON）：这才值得逐条重试
-    const out = [];
-    let failed = 0;
-    let lastError = null;
-    for (const text of list) {
-      try {
-        const one = extractJson(
-          await chat(engine, [
-            { role: "system", content: buildSystemPrompt(toLang, rule) },
-            { role: "user", content: JSON.stringify([text]) },
-          ])
-        );
-        if (Array.isArray(one) && typeof one[0] === "string" && one[0].trim()) {
-          out.push(one[0]);
-        } else {
-          out.push(text);
-          failed++;
+    // 目标为中文却仍夹带假名：只对这几条做一次「必须全中文」的重译，
+    // 这是「日语翻不彻底」最后的兜底（只重译坏的那几条，不重跑整批）。
+    if (jaActive && /^zh/i.test(String(toLang))) {
+      const bad = out.map((_, i) => i).filter((i) => Transelle.hasKana(out[i]));
+      if (bad.length) {
+        try {
+          const fixRule = {
+            terms: effectiveRule.terms,
+            prompt: `${effectiveRule.prompt}\n重要:上一次的译文里残留了日文假名。这一次必须把每一条都完整译成中文,不得出现任何平假名或片假名;专有名词用中文译名,拟声词用中文拟声词。`,
+          };
+          const fixedReply = await chat(engine, [
+            { role: "system", content: buildSystemPrompt(toLang, fixRule) },
+            { role: "user", content: JSON.stringify(bad.map((i) => list[i])) },
+          ]);
+          const fixed = extractJson(fixedReply);
+          if (Array.isArray(fixed) && fixed.length === bad.length) {
+            bad.forEach((i, k) => {
+              if (typeof fixed[k] === "string" && fixed[k].trim()) out[i] = fixed[k];
+            });
+          }
+        } catch (err) {
+          Transelle.log?.warn?.("假名残留重译失败，保留原译文:", err.message);
         }
-      } catch (err) {
-        lastError = err;
-        failed++;
-        out.push(text);
       }
     }
 
-    // 全军覆没就抛出去，让界面明确报错；
-    // 部分失败则静默保留原文，不因为个别段落坏掉就中断整页翻译。
-    if (failed === list.length && lastError) throw lastError;
     return out;
   };
 

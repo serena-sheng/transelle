@@ -159,6 +159,10 @@
     return han >= 2 && han >= latin;
   };
 
+  /** 是否含日文假名（平假名 / 片假名 / 半角片假名）——用于识别日文（含二次元文本） */
+  const KANA_ONLY_RE = /[\u3040-\u309f\u30a0-\u30ff\uff66-\uff9f]/;
+  Transelle.hasKana = (text) => KANA_ONLY_RE.test(String(text || ""));
+
   /**
    * 判断两段文本是否「实质相同」——忽略空白与标点（全角/半角、中英标点都算）。
    * 用于：译文若只是把原文的标点换了个写法（机翻端点常见的「原样返回」），
