@@ -96,6 +96,43 @@
     },
 
     /**
+     * 页面内持续显示的翻译进度（顶部小胶囊）。传空值即移除。
+     * 整页翻译会持续数秒到数十秒，没有它，用户只会以为「点了没反应」。
+     */
+    progress(text) {
+      const ID = "transelle-progress";
+      let el = document.getElementById(ID);
+      if (!text) {
+        el?.remove();
+        return;
+      }
+      if (!el) {
+        el = document.createElement("div");
+        el.id = ID;
+        el.dataset.transelleSkip = "";
+        el.classList.add("notranslate");
+        el.style.cssText = [
+          "position:fixed",
+          "left:50%",
+          "top:16px",
+          "transform:translateX(-50%)",
+          "padding:5px 14px",
+          "border-radius:999px",
+          "font-family:system-ui,-apple-system,sans-serif",
+          "font-size:12px",
+          "font-weight:600",
+          "color:#fff",
+          "background:#E93D82",
+          "box-shadow:0 4px 16px rgba(0,0,0,0.2)",
+          "z-index:2147483647",
+          "pointer-events:none",
+        ].join(";");
+        (document.body || document.documentElement).appendChild(el);
+      }
+      el.textContent = text;
+    },
+
+    /**
      * 页面内轻量提示。翻译失败时必须让用户看见，
      * 否则「点了没反应」和「扩展坏了」在用户眼里没区别。
      */
@@ -139,6 +176,7 @@
     /** 移除所有注入、把页面还原到翻译前的样子 */
     clear() {
       document.getElementById("transelle-toast")?.remove();
+      document.getElementById("transelle-progress")?.remove();
 
       document
         .querySelectorAll('[data-transelle-layer="trans"]')

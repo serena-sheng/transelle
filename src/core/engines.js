@@ -12,6 +12,8 @@
 
   const DEFAULT_TEXT_TIMEOUT = 60000;
   const DEFAULT_VISION_TIMEOUT = 120000;
+  // 并发请求下 429 / 网关抖动更常见：退避重试一次，别让整批译文白白丢掉
+  const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
   /** baseUrl 归一化：允许用户填到 /v1，也允许直接填完整的 /chat/completions */
   const endpointOf = (baseUrl) => {
@@ -58,29 +60,34 @@
 
     if (!engine || !engine.model) throw new Error("引擎未配置模型名");
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
     let res;
-    try {
-      res = await fetch(endpointOf(engine.baseUrl), {
-        method: "POST",
-        headers: buildHeaders(engine),
-        body: JSON.stringify({
-          model: engine.model,
-          messages,
-          temperature,
-          max_tokens: maxTokens,
-          stream: false,
-        }),
-        signal: controller.signal,
-      });
-    } catch (err) {
-      if (err?.name === "AbortError") {
-        throw new Error(`请求超时（${Math.round(timeout / 1000)}s）`);
+    // 至多两次尝试：首次 + 一次退避重试（仅针对限流/网关类错误）
+    for (let attempt = 0; ; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      try {
+        res = await fetch(endpointOf(engine.baseUrl), {
+          method: "POST",
+          headers: buildHeaders(engine),
+          body: JSON.stringify({
+            model: engine.model,
+            messages,
+            temperature,
+            max_tokens: maxTokens,
+            stream: false,
+          }),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        if (err?.name === "AbortError") {
+          throw new Error(`请求超时（${Math.round(timeout / 1000)}s）`);
+        }
+        throw err;
+      } finally {
+        clearTimeout(timer);
       }
-      throw err;
-    } finally {
-      clearTimeout(timer);
+      if (res.ok || !RETRYABLE_STATUS.has(res.status) || attempt >= 1) break;
+      await Transelle.sleep(600 * (attempt + 1));
     }
 
     if (!res.ok) throw await readError(res);

@@ -10,7 +10,10 @@
   const Transelle = (root.Transelle = root.Transelle || {});
   if (Transelle.pageTranslator) return;
 
-  const BATCH_SIZE = 20; // 单次请求交给模型的文本条数
+  // 小批次 + 高并发：模型是「逐字生成」的，把 20 条塞进一次请求等于让它在一条
+  // 连接上串行吐 20 条；拆成 10 条一批、6 批同时在飞，首屏与整页耗时就都下来了。
+  const BATCH_SIZE = 10; // 单次请求交给模型的文本条数
+  const CONCURRENCY = 6; // 同时在飞的批次数上限
   const MUTATION_DEBOUNCE = 600; // 动态内容补翻的防抖时间
 
   const createPageTranslator = () => {
@@ -21,6 +24,7 @@
     const cache = new Map(); // 文本哈希 -> 译文
     let observer = null;
     let progressCb = null;
+    let epoch = 0; // 每次 start/stop 自增；在飞的批次据此判断自己是否已过期
 
     const report = (payload) => {
       try {
@@ -30,68 +34,88 @@
       }
     };
 
-    /** 先用缓存命中，剩下的按批请求 */
-    const translateAll = async (items) => {
-      const resolved = new Map(); // Text node -> 译文
-      const pending = [];
+    /**
+     * 先用缓存命中，剩下的按批「并发」请求；每批一回来就回调渲染，
+     * 于是译文会一段段出现，而不是等全页跑完才一起冒出来。
+     * @param {Array<{node: Text, text: string}>} items
+     * @param {(node: Text, translated: string) => void} onResult
+     */
+    const translateAll = async (items, onResult) => {
+      const total = items.length;
+      let done = 0;
 
+      // 按「文本哈希」归组：同一段文本出现多次只请求一次，但所有节点都要回填
+      const groups = new Map(); // key -> { text, key, nodes: Text[] }
       items.forEach(({ node, text }) => {
         const key = Transelle.hash(text);
         if (cache.has(key)) {
-          resolved.set(node, cache.get(key));
-        } else {
-          pending.push({ node, text, key });
+          onResult(node, cache.get(key)); // 缓存命中：立刻渲染，不占进度等待
+          done++;
+          return;
         }
+        const group = groups.get(key);
+        if (group) group.nodes.push(node);
+        else groups.set(key, { text, key, nodes: [node] });
       });
 
-      const total = pending.length;
-      let done = 0;
-
-      for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-        const slice = pending.slice(i, i + BATCH_SIZE);
-        const texts = slice.map((s) => s.text);
-        try {
-          const translated = await Transelle.send(Transelle.MSG.TRANSLATE, {
-            texts,
-            toLang,
-            rule: { terms: rule.terms, prompt: rule.prompt },
-          });
-          slice.forEach((item, idx) => {
-            const value = translated[idx];
-            // 模型返回空或长度不符时保留原文，避免出现空白
-            const finalText =
-              typeof value === "string" && value.trim() ? value : item.text;
-            cache.set(item.key, finalText);
-            resolved.set(item.node, finalText);
-          });
-        } catch (err) {
-          Transelle.log.error("批量翻译失败:", err.message);
-          // 报给界面：否则用户只会看到「点了没反应」
-          report({ phase: "error", message: `翻译失败：${err.message}` });
-          // 该批失败：不写缓存，节点保持原文，等待下次重试
-          slice.forEach((item) => resolved.delete(item.node));
-        }
-        done += slice.length;
-        report({ phase: "translating", done, total });
+      const units = [...groups.values()];
+      const batches = [];
+      for (let i = 0; i < units.length; i += BATCH_SIZE) {
+        batches.push(units.slice(i, i + BATCH_SIZE));
       }
 
-      return resolved;
+      report({ phase: "progress", done, total });
+
+      let next = 0;
+      const worker = async () => {
+        while (next < batches.length) {
+          const batch = batches[next++];
+          const texts = batch.map((u) => u.text);
+          try {
+            const translated = await Transelle.send(Transelle.MSG.TRANSLATE, {
+              texts,
+              toLang,
+              rule: { terms: rule.terms, prompt: rule.prompt },
+            });
+            batch.forEach((unit, idx) => {
+              const value = translated[idx];
+              // 模型返回空或长度不符时保留原文，避免出现空白
+              const finalText =
+                typeof value === "string" && value.trim() ? value : unit.text;
+              cache.set(unit.key, finalText);
+              unit.nodes.forEach((n) => onResult(n, finalText));
+            });
+          } catch (err) {
+            Transelle.log.error("批量翻译失败:", err.message);
+            // 报给界面：否则用户只会看到「点了没反应」
+            report({ phase: "error", message: `翻译失败：${err.message}` });
+            // 该批失败：不写缓存，节点保持原文，等待下次重试
+          }
+          done += batch.reduce((n, u) => n + u.nodes.length, 0);
+          report({ phase: "progress", done, total });
+        }
+      };
+
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, batches.length) }, worker)
+      );
     };
 
     const runOnce = async (scope = document) => {
       if (!running || busy) return 0;
       busy = true;
+      const myEpoch = epoch;
       try {
         const items = Transelle.collector.collect(rule, scope);
         if (!items.length) return 0;
 
         report({ phase: "collecting", count: items.length });
-        const resolved = await translateAll(items);
 
         let rendered = 0;
-        resolved.forEach((translated, node) => {
-          // 翻译期间节点可能已被页面移除或替换
-          if (!node.isConnected) return;
+        // 每段译好就当场注入，用户能看着页面一点点被译完
+        await translateAll(items, (node, translated) => {
+          // 翻译期间可能已被停止、或节点被页面移除/替换
+          if (epoch !== myEpoch || !running || !node.isConnected) return;
           Transelle.renderer.render(node, translated);
           rendered++;
         });
@@ -148,12 +172,18 @@
         if (running) return;
 
         running = true;
+        epoch++;
         startObserver();
-        await runOnce(document);
+        // 不 await：整页翻译要几秒到几十秒，等它会让 popup 与页面交互一并卡住。
+        // 进度走 progressCb（content.js → renderer.progress），完成/失败也由它汇报。
+        runOnce(document).catch((err) =>
+          report({ phase: "error", message: `翻译失败：${err.message}` })
+        );
       },
 
       stop() {
         running = false;
+        epoch++; // 作废在飞的批次：迟到的结果不再回填，取消即时生效
         observer?.disconnect();
         observer = null;
         pendingRoots.clear();

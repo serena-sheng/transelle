@@ -47,8 +47,19 @@
 
   const bindProgress = () => {
     Transelle.pageTranslator.setProgressListener((event) => {
-      if (event?.phase === "error") {
+      const phase = event?.phase;
+      if (phase === "error") {
+        Transelle.renderer.progress(null);
         Transelle.renderer.toast(event.message, "error");
+      } else if (phase === "collecting") {
+        Transelle.renderer.progress(`翻译中 0/${event.count}`);
+      } else if (phase === "progress" || phase === "translating") {
+        Transelle.renderer.progress(`翻译中 ${event.done}/${event.total}`);
+      } else if (phase === "done") {
+        Transelle.renderer.progress(null);
+        if (event.rendered) {
+          Transelle.renderer.toast(`翻译完成 · ${event.rendered} 段`, "info");
+        }
       }
     });
   };
