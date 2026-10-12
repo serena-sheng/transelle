@@ -31,7 +31,10 @@
 
   const createPageTranslator = () => {
     let running = false;
-    let busy = false;
+    // 待处理队列：新增内容 / 需要补翻的范围，串行处理，**绝不丢**（见下方 drain 注释）
+    const queue = [];
+    let draining = false;
+    const rescanTimers = [];
     let rule = { ...Transelle.DEFAULT_RULE };
     let toLang = "zh-CN";
     const cache = new Map(); // 文本哈希 -> 译文
@@ -214,57 +217,78 @@
       await Promise.all(runs);
     };
 
-    const runOnce = async (scope = document) => {
-      if (!running || busy) return 0;
-      busy = true;
+    const runOnce = async (scope) => {
+      const myEpoch = epoch;
+      const items = Transelle.collector.collect(rule, scope);
+      if (!items.length) return 0;
+
+      report({ phase: "collecting", count: items.length });
+
+      let rendered = 0;
+      // 每段译好就当场注入，用户能看着页面一点点被译完
+      await translateAll(items, (node, translated) => {
+        // 翻译期间可能已被停止、或节点被页面移除/替换
+        if (epoch !== myEpoch || !running || !node.isConnected) return;
+        Transelle.renderer.render(node, translated);
+        rendered++;
+      });
+      report({ phase: "done", rendered });
+      return rendered;
+    };
+
+    /**
+     * 串行处理队列。**只延迟、绝不丢弃**——
+     * 旧实现用 Set + `busy` 直接 return，正在排队的内容会被永久漏掉：
+     * 首轮全页翻译很慢，期间页面「水合 / 懒加载」把顶部重新渲染，顶部进了队列
+     * 又撞上 busy 被丢掉，从此不再重试（表现就是「下半段翻完了、上半段没翻」，
+     * 滚动也救不回来）。现在改成排队等待，前一轮跑完自动接着处理。
+     */
+    const drain = async () => {
+      if (!running || draining) return;
+      draining = true;
       const myEpoch = epoch;
       try {
-        const items = Transelle.collector.collect(rule, scope);
-        if (!items.length) return 0;
-
-        report({ phase: "collecting", count: items.length });
-
-        let rendered = 0;
-        // 每段译好就当场注入，用户能看着页面一点点被译完
-        await translateAll(items, (node, translated) => {
-          // 翻译期间可能已被停止、或节点被页面移除/替换
-          if (epoch !== myEpoch || !running || !node.isConnected) return;
-          Transelle.renderer.render(node, translated);
-          rendered++;
-        });
-        report({ phase: "done", rendered });
-        return rendered;
+        while (running && epoch === myEpoch && queue.length) {
+          const node = queue.shift();
+          if (!node || !node.isConnected) continue; // 已被页面移除的跳过
+          try {
+            await runOnce(node);
+          } catch (err) {
+            // 单个区块失败不影响其它区块
+            Transelle.log.error("翻译区块失败:", err?.message || err);
+          }
+        }
       } finally {
-        busy = false;
+        draining = false;
       }
     };
 
-    const pendingRoots = new Set();
+    const enqueue = (node) => {
+      queue.push(node);
+      drain().catch(() => {});
+    };
 
-    const flushRoots = Transelle.debounce(async () => {
-      if (!running || !pendingRoots.size) return;
-      const roots = [...pendingRoots];
-      pendingRoots.clear();
-      // 增量补翻：只处理新增子树，避免每次动态加载都全页重扫
-      for (const node of roots) {
-        if (node.isConnected) await runOnce(node);
-      }
+    // 新增内容多的时候攒一下再处理（防抖），但只是延迟，不丢
+    const scheduleDrain = Transelle.debounce(() => {
+      drain().catch(() => {});
     }, MUTATION_DEBOUNCE);
 
     const startObserver = () => {
       observer?.disconnect();
       observer = new MutationObserver((mutations) => {
         if (!running) return;
+        let added = false;
         mutations.forEach((mutation) => {
           mutation.addedNodes.forEach((node) => {
             if (node.nodeType !== Node.ELEMENT_NODE) return;
             // 我们自己注入的节点不算新内容
             if (node.dataset?.transelleSkip !== undefined) return;
             if (node.dataset?.transelleLayer) return;
-            pendingRoots.add(node);
+            queue.push(node);
+            added = true;
           });
         });
-        if (pendingRoots.size) flushRoots();
+        if (added) scheduleDrain();
       });
       observer.observe(document.body || document.documentElement, {
         childList: true,
@@ -293,10 +317,16 @@
         epoch++;
         startObserver();
         // 不 await：整页翻译要几秒到几十秒，等它会让 popup 与页面交互一并卡住。
-        // 进度走 progressCb（content.js → renderer.progress），完成/失败也由它汇报。
-        runOnce(document).catch((err) =>
-          report({ phase: "error", message: `翻译失败：${err.message}` })
-        );
+        enqueue(document);
+        // 起始后再全页补扫两次：SPA 水合 / 懒加载常在这段时间把内容整个换掉，
+        // 而首轮可能已经「跑过了」那一块。补扫很便宜——已翻过的段落命中缓存直接渲染。
+        [1500, 5000].forEach((delay) => {
+          rescanTimers.push(
+            setTimeout(() => {
+              if (running) enqueue(document);
+            }, delay)
+          );
+        });
       },
 
       stop() {
@@ -304,7 +334,8 @@
         epoch++; // 作废在飞的批次：迟到的结果不再回填，取消即时生效
         observer?.disconnect();
         observer = null;
-        pendingRoots.clear();
+        queue.length = 0;
+        rescanTimers.splice(0).forEach((t) => clearTimeout(t));
         Transelle.renderer.clear();
       },
 
