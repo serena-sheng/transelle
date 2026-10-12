@@ -41,7 +41,7 @@
   **默认仍走 Google**——本机 ego lite 虽然暴露了这个 API，但 `create()` 会抛 `NotSupportedError`（拿不到可用模型）。
   在设置里切到「设备翻译」后：未就绪或失败会自动回退 Google，并在 `<html>` 留一个 `data-transelle-od` 状态位便于排查
 - 页面滚动预取 + MutationObserver 兜底懒加载内容
-- 译文缓存按文本哈希去重，同一段落不重复计费
+- 译文缓存按文本哈希去重，同一段落不重复计费；**术语表按批过滤**（只注入本批真出现的词条，省 token 也让小上下文模型吃得下）
 
 ### 漫画翻译
 
@@ -68,7 +68,7 @@
 | 类型 | 默认地址 | 默认模型 | 需要 Key |
 | --- | --- | --- | --- |
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-flash` | 是 |
-| 混元 Hy-MT2（腾讯 TokenHub） | `https://tokenhub.tencentmaas.com/v1` | `hy-mt2-pro` | 是 |
+| 混元 Hy-MT2（腾讯 TokenHub） | `https://tokenhub.tencentmaas.com/v1` | `hy-mt2-pro`（另有 `-plus` / `-lite`） | 是 |
 | Ollama（本地） | `http://localhost:11434/v1` | `qwen2.5:7b` | 否 |
 | 自定义（OpenAI 兼容） | `http://localhost:1234/v1` | 自行填写 | 视网关而定 |
 

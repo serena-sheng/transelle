@@ -375,6 +375,20 @@
     }
     const jaActive = !!jaCfg;
 
+    // 术语表按批过滤：只保留「本批文本里真的出现」的词条。
+    // 两个好处：① 小上下文模型（如 Hy-MT2 输入上限 4k）不会被几千条术语表撑爆；
+    // ② 省 token。未命中的词条本来也用不上。
+    if (effectiveRule.terms) {
+      const haystack = list.join("\n").toLowerCase();
+      const kept = String(effectiveRule.terms)
+        .split("\n")
+        .filter((line) => {
+          const term = line.split(",")[0].trim().toLowerCase();
+          return term && haystack.includes(term);
+        });
+      effectiveRule = { ...effectiveRule, terms: kept.join("\n") };
+    }
+
     const system = buildSystemPrompt(toLang, effectiveRule);
     const user = JSON.stringify(list);
     const messages = [

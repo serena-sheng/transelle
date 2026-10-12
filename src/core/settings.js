@@ -23,7 +23,7 @@
       baseUrl: "https://tokenhub.tencentmaas.com/v1",
       model: "hy-mt2-pro",
       needsKey: true,
-      hint: "翻译专用模型（30B-A3B），OpenAI 兼容；在腾讯云 TokenHub 控制台取 API Key。",
+      hint: "翻译专用模型，OpenAI 兼容；在腾讯云 TokenHub 控制台取 API Key。三档：hy-mt2-pro（30B-A3B，实测最快且最准）/ hy-mt2-plus / hy-mt2-lite。",
     },
     ollama: {
       type: "ollama",
